@@ -1,5 +1,5 @@
 import type { DateKey, Entry, EntriesState, EntryStatus, TimeOfDay, WeeklyScheduleState } from './types';
-import { dateKeyToDayOfWeek } from './dateUtils';
+import { addDaysToDateKey, dateKeyToDayOfWeek } from './dateUtils';
 import { getEffectiveRule } from './schedule';
 
 export function createEmptyEntriesState(): EntriesState {
@@ -45,4 +45,36 @@ export function getDayCalendarStatus(
   const entry = entries.entries[date];
   if (!entry || entry.cancelled) return 'no-record';
   return entry.status;
+}
+
+// Defensive cap so a schedule with no history yet (or a huge gap) can't
+// spin forever; ~10 years of daily lookback is far beyond any real pilot.
+const MAX_STREAK_LOOKBACK_DAYS = 3650;
+
+export function computeAchievementStreak(
+  entries: EntriesState,
+  schedule: WeeklyScheduleState,
+  asOfDate: DateKey
+): number {
+  let streak = 0;
+  let cursor = asOfDate;
+  for (let i = 0; i < MAX_STREAK_LOOKBACK_DAYS; i++) {
+    const status = getDayCalendarStatus(entries, schedule, cursor);
+    if (status === 'no-target') {
+      cursor = addDaysToDateKey(cursor, -1);
+      continue;
+    }
+    if (status === 'achieved') {
+      streak += 1;
+      cursor = addDaysToDateKey(cursor, -1);
+      continue;
+    }
+    break; // 'late' or 'no-record' breaks the streak
+  }
+  return streak;
+}
+
+export function isScheduleEditLockedForDate(entries: EntriesState, date: DateKey): boolean {
+  const entry = entries.entries[date];
+  return Boolean(entry && !entry.cancelled);
 }

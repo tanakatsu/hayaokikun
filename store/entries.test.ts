@@ -1,9 +1,11 @@
 import { addScheduleRule, createInitialSchedule } from './schedule';
 import {
   DuplicatePunchError,
+  computeAchievementStreak,
   computeEntryStatus,
   createEmptyEntriesState,
   getDayCalendarStatus,
+  isScheduleEditLockedForDate,
   recordPunchIn,
 } from './entries';
 import type { DayOfWeek } from './types';
@@ -93,5 +95,85 @@ describe('getDayCalendarStatus', () => {
       entries: { ...recorded.entries, '2026-09-21': { ...recorded.entries['2026-09-21'], cancelled: true } },
     };
     expect(getDayCalendarStatus(cancelled, schedule, '2026-09-21')).toBe('no-record');
+  });
+});
+
+describe('computeAchievementStreak', () => {
+  // 2024-01-01 is a known Monday; Saturday (dayOfWeek 6) is turned OFF from day one.
+  function buildOffSaturdaySchedule() {
+    let schedule = createInitialSchedule('2024-01-01');
+    schedule = addScheduleRule(schedule, {
+      dayOfWeek: 6,
+      enabled: false,
+      targetTime: '07:00:00',
+      effectiveFrom: '2024-01-01',
+    });
+    return schedule;
+  }
+
+  function punch(entries: ReturnType<typeof createEmptyEntriesState>, date: string, localTime: string) {
+    return recordPunchIn(entries, date, new Date(`${date}T${localTime}`).getTime(), localTime, '07:00:00');
+  }
+
+  it('counts consecutive achieved ON-days and skips an OFF day without breaking', () => {
+    const schedule = buildOffSaturdaySchedule();
+    let entries = createEmptyEntriesState();
+    // Mon 01-01 .. Fri 01-05 achieved, Sat 01-06 is OFF (no entry), Sun 01-07 and Mon 01-08 achieved.
+    entries = punch(entries, '2024-01-01', '06:50:00');
+    entries = punch(entries, '2024-01-02', '06:50:00');
+    entries = punch(entries, '2024-01-03', '06:50:00');
+    entries = punch(entries, '2024-01-04', '06:50:00');
+    entries = punch(entries, '2024-01-05', '06:50:00');
+    entries = punch(entries, '2024-01-07', '06:50:00');
+    entries = punch(entries, '2024-01-08', '06:50:00');
+
+    expect(computeAchievementStreak(entries, schedule, '2024-01-08')).toBe(7);
+  });
+
+  it('breaks the streak on a late punch', () => {
+    const schedule = buildOffSaturdaySchedule();
+    let entries = createEmptyEntriesState();
+    entries = punch(entries, '2024-01-01', '06:50:00');
+    entries = punch(entries, '2024-01-02', '06:50:00');
+    entries = punch(entries, '2024-01-03', '06:50:00');
+    entries = punch(entries, '2024-01-04', '07:10:00'); // late
+    entries = punch(entries, '2024-01-05', '06:50:00');
+    entries = punch(entries, '2024-01-07', '06:50:00');
+    entries = punch(entries, '2024-01-08', '06:50:00');
+
+    expect(computeAchievementStreak(entries, schedule, '2024-01-08')).toBe(3);
+  });
+
+  it('breaks the streak on a missing (no-record) day', () => {
+    const schedule = buildOffSaturdaySchedule();
+    let entries = createEmptyEntriesState();
+    entries = punch(entries, '2024-01-01', '06:50:00');
+    entries = punch(entries, '2024-01-02', '06:50:00');
+    entries = punch(entries, '2024-01-03', '06:50:00');
+    // 01-04 intentionally has no entry
+    entries = punch(entries, '2024-01-05', '06:50:00');
+    entries = punch(entries, '2024-01-07', '06:50:00');
+    entries = punch(entries, '2024-01-08', '06:50:00');
+
+    expect(computeAchievementStreak(entries, schedule, '2024-01-08')).toBe(3);
+  });
+});
+
+describe('isScheduleEditLockedForDate', () => {
+  it('is locked once a punch is recorded for that date', () => {
+    const entries = recordPunchIn(createEmptyEntriesState(), '2026-09-21', 1, '06:50:00', '07:00:00');
+    expect(isScheduleEditLockedForDate(entries, '2026-09-21')).toBe(true);
+  });
+
+  it('is unlocked when no punch has been recorded for that date', () => {
+    expect(isScheduleEditLockedForDate(createEmptyEntriesState(), '2026-09-21')).toBe(false);
+  });
+
+  it('is unlocked when the recorded punch was cancelled', () => {
+    const recorded = recordPunchIn(createEmptyEntriesState(), '2026-09-21', 1, '06:50:00', '07:00:00');
+    const cancelled = {
+      entries: { ...recorded.entries, '2026-09-21': { ...recorded.entries['2026-09-21'], cancelled: true } },
+    };
+    expect(isScheduleEditLockedForDate(cancelled, '2026-09-21')).toBe(false);
   });
 });
