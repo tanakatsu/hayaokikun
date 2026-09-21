@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Pressable, Text, View } from 'react-native';
 import { useAppStore } from '../store/useAppStore';
 import { getLocalDateKey, getLocalTimeOfDay, isWithinPunchWindow } from '../store/dateUtils';
@@ -13,6 +13,7 @@ export default function TodayScreen() {
   const punchIn = useAppStore((s) => s.punchIn);
   const [canPunch, setCanPunch] = useState(false);
   const [reason, setReason] = useState('読み込み中です…');
+  const isPunchingRef = useRef(false);
 
   useEffect(() => {
     if (!hydrated) hydrate();
@@ -65,22 +66,27 @@ export default function TodayScreen() {
   }, [reevaluate]);
 
   const handlePunch = useCallback(async () => {
-    if (!hydrated) return;
-    // Re-fetch the current time right before punching, never a stale value
-    // captured when the screen first opened.
-    const now = new Date();
-    const today = getLocalDateKey(now);
-    const timeOfDay = getLocalTimeOfDay(now);
-    const dayOfWeek = now.getDay() as DayOfWeek;
-    const rule = getEffectiveRule(schedule, dayOfWeek, today);
-    if (!rule || !rule.enabled || !isWithinPunchWindow(timeOfDay)) {
+    if (!hydrated || isPunchingRef.current) return;
+    isPunchingRef.current = true;
+    try {
+      // Re-fetch the current time right before punching, never a stale value
+      // captured when the screen first opened.
+      const now = new Date();
+      const today = getLocalDateKey(now);
+      const timeOfDay = getLocalTimeOfDay(now);
+      const dayOfWeek = now.getDay() as DayOfWeek;
+      const rule = getEffectiveRule(schedule, dayOfWeek, today);
+      if (!rule || !rule.enabled || !isWithinPunchWindow(timeOfDay)) {
+        reevaluate();
+        return;
+      }
+      const success = await punchIn(today, now.getTime(), timeOfDay, rule.targetTime);
       reevaluate();
-      return;
-    }
-    const success = await punchIn(today, now.getTime(), timeOfDay, rule.targetTime);
-    reevaluate();
-    if (!success) {
-      setReason('記録に失敗しました。もう一度お試しください。');
+      if (!success && useAppStore.getState().lastError !== 'already-punched') {
+        setReason('記録に失敗しました。もう一度お試しください。');
+      }
+    } finally {
+      isPunchingRef.current = false;
     }
   }, [hydrated, schedule, punchIn, reevaluate]);
 

@@ -96,6 +96,24 @@ describe('getDayCalendarStatus', () => {
     };
     expect(getDayCalendarStatus(cancelled, schedule, '2026-09-21')).toBe('no-record');
   });
+
+  it('does not retroactively reclassify a past date after the weekday is later turned OFF', () => {
+    const pastDate = '2024-01-01';
+    const dayOfWeek = new Date(2024, 0, 1).getDay() as DayOfWeek;
+    let schedule = createInitialSchedule('2024-01-01');
+    const entries = recordPunchIn(createEmptyEntriesState(), pastDate, 1, '06:50:00', '07:00:00');
+
+    expect(getDayCalendarStatus(entries, schedule, pastDate)).toBe('achieved');
+
+    schedule = addScheduleRule(schedule, {
+      dayOfWeek,
+      enabled: false,
+      targetTime: '07:00:00',
+      effectiveFrom: '2024-06-01',
+    });
+
+    expect(getDayCalendarStatus(entries, schedule, pastDate)).toBe('achieved');
+  });
 });
 
 describe('computeAchievementStreak', () => {

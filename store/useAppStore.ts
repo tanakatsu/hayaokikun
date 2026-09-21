@@ -5,7 +5,7 @@ import { createInitialSchedule, addScheduleRule } from './schedule';
 import { getLocalDateKey } from './dateUtils';
 import { loadEntriesState, loadScheduleState, saveEntriesState, saveScheduleState } from './persistence';
 
-type LastError = null | 'save-failed' | 'already-punched' | 'schedule-locked-today';
+type LastError = null | 'save-failed' | 'already-punched' | 'schedule-locked-today' | 'not-hydrated';
 
 interface AppStoreState {
   entries: EntriesState;
@@ -59,15 +59,28 @@ export function createAppStore() {
     },
 
     addScheduleRuleAndPersist: async (rule) => {
+      if (!get().hydrated) {
+        set({ lastError: 'not-hydrated' });
+        return false;
+      }
       const today = getLocalDateKey(new Date());
+      if (rule.effectiveFrom < today) {
+        set({ lastError: 'schedule-locked-today' });
+        return false;
+      }
       if (rule.effectiveFrom === today && isScheduleEditLockedForDate(get().entries, today)) {
         set({ lastError: 'schedule-locked-today' });
         return false;
       }
-      const next = addScheduleRule(get().schedule, rule);
-      await saveScheduleState(next);
-      set({ schedule: next, lastError: null });
-      return true;
+      try {
+        const next = addScheduleRule(get().schedule, rule);
+        await saveScheduleState(next);
+        set({ schedule: next, lastError: null });
+        return true;
+      } catch {
+        set({ lastError: 'save-failed' });
+        return false;
+      }
     },
   }));
 }
