@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { EntriesState, ScheduleRule, WeeklyScheduleState, DateKey, TimeOfDay } from './types';
+import type { EntriesState, ScheduleRule, WeeklyScheduleState, DateKey, TimeOfDay, DayOfWeek } from './types';
 import { createEmptyEntriesState, recordPunchIn, DuplicatePunchError, isScheduleEditLockedForDate } from './entries';
 import { createInitialSchedule, addScheduleRule } from './schedule';
 import { getLocalDateKey } from './dateUtils';
@@ -64,11 +64,16 @@ export function createAppStore() {
         return false;
       }
       const today = getLocalDateKey(new Date());
+      const todayDayOfWeek = new Date().getDay() as DayOfWeek;
       if (rule.effectiveFrom < today) {
         set({ lastError: 'schedule-locked-today' });
         return false;
       }
-      if (rule.effectiveFrom === today && isScheduleEditLockedForDate(get().entries, today)) {
+      if (
+        rule.effectiveFrom === today &&
+        rule.dayOfWeek === todayDayOfWeek &&
+        isScheduleEditLockedForDate(get().entries, today)
+      ) {
         set({ lastError: 'schedule-locked-today' });
         return false;
       }

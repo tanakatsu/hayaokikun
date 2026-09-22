@@ -92,4 +92,22 @@ describe('useAppStore addScheduleRuleAndPersist', () => {
     expect(success).toBe(true);
     expect(mockedPersistence.saveScheduleState).toHaveBeenCalledTimes(1);
   });
+
+  it('allows a change to a different weekday even if today (a different weekday) is already punched', async () => {
+    mockedPersistence.saveEntriesState.mockResolvedValue(undefined);
+    const store = createAppStore();
+    await store.getState().hydrate();
+    // 2026-09-22 is a Tuesday (dayOfWeek 2); punch today, then edit Wednesday's (dayOfWeek 3) rule.
+    await store.getState().punchIn('2026-09-22', 1000, '06:55:00', '07:00:00');
+
+    const success = await store.getState().addScheduleRuleAndPersist({
+      dayOfWeek: 3,
+      enabled: true,
+      targetTime: '08:00:00',
+      effectiveFrom: '2026-09-22',
+    });
+
+    expect(success).toBe(true);
+    expect(mockedPersistence.saveScheduleState).toHaveBeenCalledTimes(1);
+  });
 });
