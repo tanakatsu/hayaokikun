@@ -44,11 +44,14 @@ export default function TodayScreen() {
     const timeOfDay = getLocalTimeOfDay(now);
     const dayOfWeek = now.getDay() as DayOfWeek;
     const rule = getEffectiveRule(schedule, dayOfWeek, today);
-    const alreadyPunched = Boolean(entries.entries[today]);
+    const todayEntry = entries.entries[today];
 
-    if (alreadyPunched) {
+    if (todayEntry && !todayEntry.cancelled) {
       setCanPunch(false);
       setReason('本日はすでに記録済みです');
+    } else if (todayEntry && todayEntry.cancelled) {
+      setCanPunch(false);
+      setReason('本日の記録は取り消されました（再打刻はできません）');
     } else if (!rule || !rule.enabled) {
       setCanPunch(false);
       setReason('本日は目標が設定されていません');

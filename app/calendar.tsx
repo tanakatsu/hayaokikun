@@ -82,6 +82,10 @@ export default function CalendarScreen() {
           setVisibleYear(m.year);
           setVisibleMonth(m.month);
         }}
+        // buildMarkedStatusesForMonth only builds statuses for the visible
+        // month, so leading/trailing days from adjacent months would
+        // otherwise render with the wrong (default 'no-target') status.
+        hideExtraDays
         // react-native-calendars' MarkingProps/DayProps types are "weak"
         // (every field optional) and don't declare our custom `status`
         // field, so TS's weak-type check rejects a direct assignment even

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useAppStore } from '../store/useAppStore';
 import { verifyPin } from '../store/pin';
@@ -94,7 +94,15 @@ function CancelTodaySection() {
   // not change the number of hooks called).
   const handleCancel = useCallback(async () => {
     const success = await cancelEntryAndPersist(today);
-    setMessage(success ? '本日の記録を取り消しました' : '取り消しに失敗しました');
+    if (success) {
+      // The success message can't rely on local `message` state: the moment
+      // cancellation succeeds, todayEntry.cancelled flips to true on the
+      // next render, and the component's own guard below unmounts this
+      // whole section (message included) before anyone could see it.
+      Alert.alert('取り消しました', '本日の記録を取り消しました');
+    } else {
+      setMessage('取り消しに失敗しました');
+    }
   }, [cancelEntryAndPersist, today]);
 
   const todayEntry = entries.entries[today];
