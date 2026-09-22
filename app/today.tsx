@@ -4,6 +4,7 @@ import { useAppStore } from '../store/useAppStore';
 import { getLocalDateKey, getLocalTimeOfDay, isWithinPunchWindow } from '../store/dateUtils';
 import { getEffectiveRule } from '../store/schedule';
 import { computeAchievementStreak, computePointsBalance, getDayCalendarStatus } from '../store/entries';
+import { selectEncouragementMessage } from '../lib/messages';
 import type { DayOfWeek } from '../store/types';
 
 export default function TodayScreen() {
@@ -26,6 +27,7 @@ export default function TodayScreen() {
     'no-record': '😴',
     'no-target': '😌',
   };
+  const encouragement = hydrated ? selectEncouragementMessage(entries, schedule, today) : null;
 
   useEffect(() => {
     if (!hydrated) hydrate();
@@ -107,6 +109,7 @@ export default function TodayScreen() {
       <Text style={{ fontSize: 48 }}>{CHARACTER[todayStatus]}</Text>
       <Text style={{ fontSize: 18 }}>ポイント: {points}</Text>
       <Text style={{ fontSize: 14 }}>連続達成: {streak}日</Text>
+      {encouragement ? <Text style={{ fontSize: 14, textAlign: 'center' }}>{encouragement}</Text> : null}
       <Pressable
         onPress={handlePunch}
         disabled={!canPunch}
