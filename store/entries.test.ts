@@ -178,6 +178,17 @@ describe('computeAchievementStreak', () => {
 
     expect(computeAchievementStreak(entries, schedule, '2024-01-08')).toBe(3);
   });
+
+  it('breaks the streak when an achieved day is later cancelled', () => {
+    const schedule = buildOffSaturdaySchedule();
+    let entries = createEmptyEntriesState();
+    entries = punch(entries, '2024-01-01', '06:50:00');
+    entries = punch(entries, '2024-01-02', '06:50:00');
+    entries = punch(entries, '2024-01-03', '06:50:00');
+    entries = cancelEntry(entries, '2024-01-02'); // cancel the middle day of what would be a 3-day streak
+
+    expect(computeAchievementStreak(entries, schedule, '2024-01-03')).toBe(1);
+  });
 });
 
 describe('isScheduleEditLockedForDate', () => {
