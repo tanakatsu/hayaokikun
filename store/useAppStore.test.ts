@@ -111,3 +111,47 @@ describe('useAppStore addScheduleRuleAndPersist', () => {
     expect(mockedPersistence.saveScheduleState).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('useAppStore cancelEntryAndPersist', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    mockedPersistence.loadEntriesState.mockResolvedValue(createEmptyEntriesState());
+    mockedPersistence.loadScheduleState.mockResolvedValue(createInitialSchedule('2026-01-01'));
+  });
+
+  it('cancels a recorded entry only after the write succeeds', async () => {
+    mockedPersistence.saveEntriesState.mockResolvedValue(undefined);
+    const store = createAppStore();
+    await store.getState().hydrate();
+    await store.getState().punchIn('2026-09-21', 1000, '06:55:00', '07:00:00');
+
+    const success = await store.getState().cancelEntryAndPersist('2026-09-21');
+
+    expect(success).toBe(true);
+    expect(store.getState().entries.entries['2026-09-21'].cancelled).toBe(true);
+  });
+
+  it('leaves state untouched when persistence fails', async () => {
+    mockedPersistence.saveEntriesState.mockResolvedValueOnce(undefined); // the punchIn save succeeds
+    const store = createAppStore();
+    await store.getState().hydrate();
+    await store.getState().punchIn('2026-09-21', 1000, '06:55:00', '07:00:00');
+    mockedPersistence.saveEntriesState.mockRejectedValueOnce(new Error('disk full')); // the cancel save fails
+
+    const success = await store.getState().cancelEntryAndPersist('2026-09-21');
+
+    expect(success).toBe(false);
+    expect(store.getState().entries.entries['2026-09-21'].cancelled).toBe(false);
+    expect(store.getState().lastError).toBe('save-failed');
+  });
+
+  it('returns false when there is nothing to cancel for that date', async () => {
+    const store = createAppStore();
+    await store.getState().hydrate();
+
+    const success = await store.getState().cancelEntryAndPersist('2026-09-21');
+
+    expect(success).toBe(false);
+    expect(store.getState().lastError).toBe('no-entry-to-cancel');
+  });
+});

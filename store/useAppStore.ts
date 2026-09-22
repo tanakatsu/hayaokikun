@@ -1,11 +1,24 @@
 import { create } from 'zustand';
 import type { EntriesState, ScheduleRule, WeeklyScheduleState, DateKey, TimeOfDay, DayOfWeek } from './types';
-import { createEmptyEntriesState, recordPunchIn, DuplicatePunchError, isScheduleEditLockedForDate } from './entries';
+import {
+  createEmptyEntriesState,
+  recordPunchIn,
+  DuplicatePunchError,
+  isScheduleEditLockedForDate,
+  cancelEntry,
+  NoEntryToCancelError,
+} from './entries';
 import { createInitialSchedule, addScheduleRule } from './schedule';
 import { getLocalDateKey } from './dateUtils';
 import { loadEntriesState, loadScheduleState, saveEntriesState, saveScheduleState } from './persistence';
 
-type LastError = null | 'save-failed' | 'already-punched' | 'schedule-locked-today' | 'not-hydrated';
+type LastError =
+  | null
+  | 'save-failed'
+  | 'already-punched'
+  | 'schedule-locked-today'
+  | 'not-hydrated'
+  | 'no-entry-to-cancel';
 
 interface AppStoreState {
   entries: EntriesState;
@@ -20,6 +33,7 @@ interface AppStoreState {
     targetTimeSnapshot: TimeOfDay
   ) => Promise<boolean>;
   addScheduleRuleAndPersist: (rule: ScheduleRule) => Promise<boolean>;
+  cancelEntryAndPersist: (date: DateKey) => Promise<boolean>;
 }
 
 export function createAppStore() {
@@ -86,6 +100,27 @@ export function createAppStore() {
         set({ lastError: 'save-failed' });
         return false;
       }
+    },
+
+    cancelEntryAndPersist: async (date) => {
+      let next: EntriesState;
+      try {
+        next = cancelEntry(get().entries, date);
+      } catch (e) {
+        if (e instanceof NoEntryToCancelError) {
+          set({ lastError: 'no-entry-to-cancel' });
+          return false;
+        }
+        throw e;
+      }
+      try {
+        await saveEntriesState(next);
+      } catch {
+        set({ lastError: 'save-failed' });
+        return false;
+      }
+      set({ entries: next, lastError: null });
+      return true;
     },
   }));
 }

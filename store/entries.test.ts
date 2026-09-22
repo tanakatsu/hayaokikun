@@ -1,6 +1,8 @@
 import { addScheduleRule, createInitialSchedule } from './schedule';
 import {
   DuplicatePunchError,
+  NoEntryToCancelError,
+  cancelEntry,
   computeAchievementStreak,
   computeEntryStatus,
   computePointsBalance,
@@ -194,6 +196,39 @@ describe('isScheduleEditLockedForDate', () => {
       entries: { ...recorded.entries, '2026-09-21': { ...recorded.entries['2026-09-21'], cancelled: true } },
     };
     expect(isScheduleEditLockedForDate(cancelled, '2026-09-21')).toBe(false);
+  });
+});
+
+describe('cancelEntry', () => {
+  it('marks the entry cancelled while preserving the original punch fields', () => {
+    const entries = recordPunchIn(createEmptyEntriesState(), '2026-09-21', 1000, '06:50:00', '07:00:00');
+    const next = cancelEntry(entries, '2026-09-21');
+    expect(next.entries['2026-09-21']).toEqual({
+      date: '2026-09-21',
+      punchedAtEpochMs: 1000,
+      punchedAtLocalTime: '06:50:00',
+      targetTimeSnapshot: '07:00:00',
+      status: 'achieved',
+      cancelled: true,
+    });
+  });
+
+  it('does not mutate the input state', () => {
+    const entries = recordPunchIn(createEmptyEntriesState(), '2026-09-21', 1000, '06:50:00', '07:00:00');
+    cancelEntry(entries, '2026-09-21');
+    expect(entries.entries['2026-09-21'].cancelled).toBe(false);
+  });
+
+  it('throws when there is no entry to cancel', () => {
+    expect(() => cancelEntry(createEmptyEntriesState(), '2026-09-21')).toThrow(NoEntryToCancelError);
+  });
+
+  it('does not block a subsequent punch on that date (repunch is still refused by design)', () => {
+    let entries = recordPunchIn(createEmptyEntriesState(), '2026-09-21', 1000, '06:50:00', '07:00:00');
+    entries = cancelEntry(entries, '2026-09-21');
+    expect(() => recordPunchIn(entries, '2026-09-21', 2000, '06:55:00', '07:00:00')).toThrow(
+      DuplicatePunchError
+    );
   });
 });
 

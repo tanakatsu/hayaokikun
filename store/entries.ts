@@ -35,6 +35,17 @@ export function recordPunchIn(
   return { entries: { ...state.entries, [date]: entry } };
 }
 
+export class NoEntryToCancelError extends Error {}
+
+export function cancelEntry(state: EntriesState, date: DateKey): EntriesState {
+  const entry = state.entries[date];
+  if (!entry) {
+    throw new NoEntryToCancelError(`No entry for ${date} to cancel`);
+  }
+  if (entry.cancelled) return state; // idempotent
+  return { entries: { ...state.entries, [date]: { ...entry, cancelled: true } } };
+}
+
 export function getDayCalendarStatus(
   entries: EntriesState,
   schedule: WeeklyScheduleState,

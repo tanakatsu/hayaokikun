@@ -4,7 +4,7 @@ import DateTimePicker, { type DateTimePickerEvent } from '@react-native-communit
 import { useAppStore } from '../store/useAppStore';
 import { verifyPin } from '../store/pin';
 import { getLocalDateKey } from '../store/dateUtils';
-import { isScheduleEditLockedForDate } from '../store/entries';
+import { getDayCalendarStatus, isScheduleEditLockedForDate } from '../store/entries';
 import { DEFAULT_TARGET_TIME, getEffectiveRule, isValidTargetTime } from '../store/schedule';
 import type { DayOfWeek, TimeOfDay } from '../store/types';
 
@@ -81,6 +81,40 @@ function ScheduleRow({ dayOfWeek }: { dayOfWeek: DayOfWeek }) {
   );
 }
 
+function CancelTodaySection() {
+  const entries = useAppStore((s) => s.entries);
+  const schedule = useAppStore((s) => s.schedule);
+  const cancelEntryAndPersist = useAppStore((s) => s.cancelEntryAndPersist);
+  const today = getLocalDateKey(new Date());
+  const [message, setMessage] = useState('');
+
+  // Hooks must run unconditionally on every render, so handleCancel is
+  // declared before the early-return guard below (e.g. cancelling flips
+  // todayEntry.cancelled to true on this same mounted instance, which must
+  // not change the number of hooks called).
+  const handleCancel = useCallback(async () => {
+    const success = await cancelEntryAndPersist(today);
+    setMessage(success ? '本日の記録を取り消しました' : '取り消しに失敗しました');
+  }, [cancelEntryAndPersist, today]);
+
+  const todayEntry = entries.entries[today];
+  if (!todayEntry || todayEntry.cancelled) return null; // nothing recorded (or already cancelled) — nothing to show
+
+  const status = getDayCalendarStatus(entries, schedule, today);
+
+  return (
+    <View style={{ marginTop: 24, gap: 8 }}>
+      <Text style={{ fontSize: 16, fontWeight: '600' }}>本日の記録の取り消し</Text>
+      <Text>現在の記録: {status === 'achieved' ? '達成' : '未達成（遅刻）'}（{todayEntry.punchedAtLocalTime}打刻）</Text>
+      <Text style={{ fontSize: 12, color: '#757575' }}>取り消すと「未記録」扱いに戻りますが、本日の再打刻はできません。</Text>
+      <Pressable onPress={handleCancel} style={{ padding: 8, alignSelf: 'flex-start' }}>
+        <Text>取り消す</Text>
+      </Pressable>
+      {message ? <Text>{message}</Text> : null}
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const [pinInput, setPinInput] = useState('');
   const [unlocked, setUnlocked] = useState(false);
@@ -121,6 +155,7 @@ export default function SettingsScreen() {
       {ALL_DAYS.map((d) => (
         <ScheduleRow key={d} dayOfWeek={d} />
       ))}
+      <CancelTodaySection />
     </ScrollView>
   );
 }
