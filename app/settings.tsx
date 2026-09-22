@@ -1,49 +1,100 @@
 import { useCallback, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useAppStore } from '../store/useAppStore';
 import { verifyPin } from '../store/pin';
 import { getLocalDateKey } from '../store/dateUtils';
 import { isScheduleEditLockedForDate } from '../store/entries';
-import { isValidTargetTime } from '../store/schedule';
-import type { DayOfWeek } from '../store/types';
+import { DEFAULT_TARGET_TIME, getEffectiveRule, isValidTargetTime } from '../store/schedule';
+import type { DayOfWeek, TimeOfDay } from '../store/types';
 
 const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
+const ALL_DAYS: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
 
-export default function SettingsScreen() {
+function timeOfDayToDate(time: TimeOfDay): Date {
+  const [h, m, s] = time.split(':').map(Number);
+  const d = new Date();
+  d.setHours(h, m, s, 0);
+  return d;
+}
+
+function dateToTimeOfDay(d: Date): TimeOfDay {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+}
+
+function ScheduleRow({ dayOfWeek }: { dayOfWeek: DayOfWeek }) {
   const entries = useAppStore((s) => s.entries);
+  const schedule = useAppStore((s) => s.schedule);
   const addScheduleRuleAndPersist = useAppStore((s) => s.addScheduleRuleAndPersist);
-  const [pinInput, setPinInput] = useState('');
-  const [unlocked, setUnlocked] = useState(false);
-  const [targetTimeInput, setTargetTimeInput] = useState('07:00:00');
-  const [message, setMessage] = useState('');
-
   const today = getLocalDateKey(new Date());
   const todayDayOfWeek = new Date().getDay() as DayOfWeek;
-  const locked = isScheduleEditLockedForDate(entries, today);
+
+  const effectiveRule = getEffectiveRule(schedule, dayOfWeek, today);
+  const [enabled, setEnabled] = useState(effectiveRule?.enabled ?? true);
+  const [targetTime, setTargetTime] = useState<TimeOfDay>(effectiveRule?.targetTime ?? DEFAULT_TARGET_TIME);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const isTodayRow = dayOfWeek === todayDayOfWeek;
+  const locked = isTodayRow && isScheduleEditLockedForDate(entries, today);
+
+  const handleTimeChange = useCallback((_event: DateTimePickerEvent, selected?: Date) => {
+    setPickerOpen(false);
+    if (!selected) return;
+    setTargetTime(dateToTimeOfDay(selected));
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    if (enabled && !isValidTargetTime(targetTime)) {
+      setMessage('目標時刻は04:00〜12:00の範囲で入力してください');
+      return;
+    }
+    const success = await addScheduleRuleAndPersist({
+      dayOfWeek,
+      enabled,
+      targetTime,
+      effectiveFrom: today,
+    });
+    setMessage(success ? '保存しました' : '本日はすでに打刻済みのため変更できません');
+  }, [addScheduleRuleAndPersist, dayOfWeek, enabled, targetTime, today]);
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, opacity: locked ? 0.5 : 1 }}>
+      <Text style={{ width: 24 }}>{WEEKDAY_LABELS[dayOfWeek]}</Text>
+      <Switch value={enabled} onValueChange={setEnabled} disabled={locked} />
+      {enabled ? (
+        <Pressable onPress={() => !locked && setPickerOpen(true)} disabled={locked}>
+          <Text>{targetTime.slice(0, 5)}</Text>
+        </Pressable>
+      ) : (
+        <Text style={{ color: '#9E9E9E' }}>－</Text>
+      )}
+      <Pressable onPress={handleSave} disabled={locked} style={{ padding: 8 }}>
+        <Text>保存</Text>
+      </Pressable>
+      {message ? <Text style={{ fontSize: 12 }}>{message}</Text> : null}
+      {pickerOpen ? (
+        <DateTimePicker value={timeOfDayToDate(targetTime)} mode="time" is24Hour onChange={handleTimeChange} />
+      ) : null}
+    </View>
+  );
+}
+
+export default function SettingsScreen() {
+  const [pinInput, setPinInput] = useState('');
+  const [unlocked, setUnlocked] = useState(false);
+  const [pinMessage, setPinMessage] = useState('');
 
   const handleUnlock = useCallback(async () => {
     const ok = await verifyPin(pinInput);
     if (ok) {
       setUnlocked(true);
-      setMessage('');
+      setPinMessage('');
     } else {
-      setMessage('PINが違います');
+      setPinMessage('PINが違います');
     }
   }, [pinInput]);
-
-  const handleSave = useCallback(async () => {
-    if (!isValidTargetTime(targetTimeInput)) {
-      setMessage('目標時刻は04:00:00〜12:00:00の範囲で入力してください');
-      return;
-    }
-    const success = await addScheduleRuleAndPersist({
-      dayOfWeek: todayDayOfWeek,
-      enabled: true,
-      targetTime: targetTimeInput,
-      effectiveFrom: today,
-    });
-    setMessage(success ? '保存しました' : '本日はすでに打刻済みのため変更できません');
-  }, [addScheduleRuleAndPersist, targetTimeInput, todayDayOfWeek, today]);
 
   if (!unlocked) {
     return (
@@ -59,25 +110,17 @@ export default function SettingsScreen() {
         <Pressable onPress={handleUnlock} style={{ padding: 12 }}>
           <Text>確認</Text>
         </Pressable>
-        {message ? <Text>{message}</Text> : null}
+        {pinMessage ? <Text>{pinMessage}</Text> : null}
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-      <Text>{WEEKDAY_LABELS[todayDayOfWeek]}曜日の目標時刻</Text>
-      <TextInput
-        value={targetTimeInput}
-        onChangeText={setTargetTimeInput}
-        editable={!locked}
-        style={{ borderWidth: 1, padding: 8, width: 120, textAlign: 'center', opacity: locked ? 0.4 : 1 }}
-      />
-      {locked ? <Text>本日は打刻済みのため編集できません</Text> : null}
-      <Pressable onPress={handleSave} disabled={locked} style={{ padding: 12 }}>
-        <Text>保存</Text>
-      </Pressable>
-      {message ? <Text>{message}</Text> : null}
-    </View>
+    <ScrollView contentContainerStyle={{ padding: 16, gap: 4 }}>
+      <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8 }}>曜日ごとの目標起床時刻</Text>
+      {ALL_DAYS.map((d) => (
+        <ScheduleRow key={d} dayOfWeek={d} />
+      ))}
+    </ScrollView>
   );
 }
