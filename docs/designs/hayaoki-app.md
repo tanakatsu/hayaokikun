@@ -24,7 +24,7 @@ Mode: Builder
 - 励ましメッセージはMVPではローカルのルールベーステンプレートで良い。
 - **打刻の有効時間帯**: 04:00〜12:00（ローカル時間）のみ受け付ける。この時間帯外は打刻ボタンを無効化し、理由を表示する（夜間や日中に打刻してストリークを稼ぐことを防ぐ）。
 - **達成の判定**: 打刻時刻が目標時刻と同時刻、またはそれより早い場合（秒単位まで含め、07:00:00基準で ≦ 目標時刻）を「達成」とする。
-- **記録の取り消し**: 「今日の記録を削除・再打刻」はできない（削除→再打刻すると時間経過で判定が変わる、正午を過ぎたら再打刻不可能になるなどの矛盾があるため）。代わりに、**親のみ**がSettings画面から「記録の取り消し（キャンセル）」ができる。取り消しは元の打刻時刻を保持したまま「未記録」状態に戻すだけで、時刻の書き換えや再打刻は提供しない。
+- **記録の取り消し**: 「今日の記録を削除・再打刻」はできない（削除→再打刻すると時間経過で判定が変わる、正午を過ぎたら再打刻不可能になるなどの矛盾があるため）。代わりに、**親のみ**がSettings画面から「記録の取り消し（キャンセル）」ができる。取り消しは元の打刻時刻を保持したまま「未記録」状態に戻すだけで、時刻の書き換えや再打刻は提供しない。取り消しは元に戻せない操作のため、実行前に確認ダイアログを表示する（実装時に追加）。
 - **曜日ごとのON/OFF**: 各曜日に「その日は目標なし（学校がない日など）」を切り替えられる。OFFの日は打刻ボタン自体を無効化し、カレンダー配色・採点・ストリークの対象から完全に除外する（数えない・断ちもしない）。
 - **曜日設定の変更履歴**: 目標時刻・ON/OFFの設定変更は「有効開始日」付きで履歴として保持する（上書きしない）。過去の未打刻日を分類する際は、その日付の時点で有効だった設定を参照する。これにより、後から曜日設定を変えても過去の分類が遡及的に変わらない。
 - **設定変更の保護**: 目標時刻・曜日ON/OFFの変更は親確認PIN（Settings内の簡易PIN）で保護する。加えて、当日の打刻が記録された後は、その日の目標時刻はロックされ変更できない（打刻後に目標を動かして判定を変える抜け道を防ぐ）。
@@ -175,59 +175,61 @@ Sequential implementation, no parallelization opportunity. 単一開発者によ
 
 Synthesized from this review's findings. Each task derives from a specific finding above. Run with Claude Code or Codex; checkbox as you ship.
 
-- [ ] **T1 (P1, human: ~3h / CC: ~30min)** — store — Entry/WeeklyScheduleのデータ型定義・重複打刻ガード・秒単位達成判定
+**Status: 全14件完了・mainにマージ済み（2026-09-22）。** T1〜T7は土曜日スコープ（実装計画: `docs/superpowers/plans/2026-09-21-hayaoki-store-foundation.md`）、T8〜T14は日曜日スコープ＋任意項目（実装計画: `docs/superpowers/plans/2026-09-22-hayaoki-calendar-ui-notifications.md`）で実装。T9実装時に、当日打刻ロックが本来ロックすべき曜日以外の設定変更まで巻き込んでブロックしていたバグを発見・修正（T5時点では単一曜日編集のみだったため表面化していなかった）。
+
+- [x] **T1 (P1, human: ~3h / CC: ~30min)** — store — Entry/WeeklyScheduleのデータ型定義・重複打刻ガード・秒単位達成判定
   - Surfaced by: Next Steps 土曜日; Codex#1/#6
   - Files: `store/entries.ts`, `store/schedule.ts`
   - Verify: T14の単体テストがgreen
-- [ ] **T2 (P1, human: ~30min / CC: ~10min)** — store — 永続化成功を確認してからUI更新（楽観的UIなし）、失敗時トースト
+- [x] **T2 (P1, human: ~30min / CC: ~10min)** — store — 永続化成功を確認してからUI更新（楽観的UIなし）、失敗時トースト
   - Surfaced by: 6A (Codex#3)
   - Files: `store/entries.ts`
   - Verify: AsyncStorage書き込みを失敗させるモックでUIが「未記録」のままであることを確認
-- [ ] **T3 (P1, human: ~20min / CC: ~10min)** — store — 起動時JSONパース失敗を安全に空ストアへフォールバック
+- [x] **T3 (P1, human: ~20min / CC: ~10min)** — store — 起動時JSONパース失敗を安全に空ストアへフォールバック
   - Surfaced by: 1A
   - Files: `store/entries.ts`
   - Verify: 壊れたJSONを注入して起動→クラッシュせず空ストアで起動することを確認
-- [ ] **T4 (P1, human: ~1h / CC: ~15min)** — store — 曜日設定変更履歴（有効開始日付き）の実装
+- [x] **T4 (P1, human: ~1h / CC: ~15min)** — store — 曜日設定変更履歴（有効開始日付き）の実装
   - Surfaced by: 4A (Codex#1)
   - Files: `store/schedule.ts`
   - Verify: 曜日をON→OFFに変更後も過去の未打刻日の分類が変わらないことを単体テストで確認
-- [ ] **T5 (P1, human: ~30min / CC: ~10min)** — settings — 設定変更の親確認PIN保護＋当日打刻後の目標ロック
+- [x] **T5 (P1, human: ~30min / CC: ~10min)** — settings — 設定変更の親確認PIN保護＋当日打刻後の目標ロック
   - Surfaced by: 5A (Codex#2)
   - Files: `app/settings.tsx`, `store/schedule.ts`
   - Verify: PINなしで変更できないこと、当日打刻後は目標時刻フィールドが編集不可であることを確認
-- [ ] **T6 (P1, human: ~15min / CC: ~5min)** — today — 打刻直前の時刻再取得・フォアグラウンド復帰時のボタン状態再評価
+- [x] **T6 (P1, human: ~15min / CC: ~5min)** — today — 打刻直前の時刻再取得・フォアグラウンド復帰時のボタン状態再評価
   - Surfaced by: 9A (Codex#6)
   - Files: `app/today.tsx`
   - Verify: 正午をまたいでアプリを開きっぱなしにし、復帰時にボタンが無効化されることを確認
-- [ ] **T7 (P1, human: ~30min / CC: ~10min)** — store — 達成ストリーク計算（OFF日除外、遅刻/未記録で断つ）
+- [x] **T7 (P1, human: ~30min / CC: ~10min)** — store — 達成ストリーク計算（OFF日除外、遅刻/未記録で断つ）
   - Surfaced by: 8A (Codex#5)
   - Files: `store/entries.ts`
   - Verify: T14の単体テストがgreen（OFF日を挟んだストリーク継続、遅刻タップでの断ち切り）
-- [ ] **T8 (P2, human: ~2h / CC: ~20min)** — calendar — react-native-calendarsで4状態の色分け表示
+- [x] **T8 (P2, human: ~2h / CC: ~20min)** — calendar — react-native-calendarsで4状態の色分け表示
   - Surfaced by: Next Steps 日曜日
   - Files: `app/calendar.tsx`
   - Verify: 手動QA（Test Plan Artifact参照）
-- [ ] **T9 (P2, human: ~1.5h / CC: ~15min)** — settings — 曜日ごとの目標時刻設定画面（ネイティブタイムピッカー、PIN保護）
+- [x] **T9 (P2, human: ~1.5h / CC: ~15min)** — settings — 曜日ごとの目標時刻設定画面（ネイティブタイムピッカー、PIN保護）
   - Surfaced by: Next Steps 日曜日; 5A
   - Files: `app/settings.tsx`
   - Verify: 手動QA
-- [ ] **T10 (P2, human: ~1h / CC: ~15min)** — today — Today画面: ポイント残高・達成ストリーク・キャラクター表示
+- [x] **T10 (P2, human: ~1h / CC: ~15min)** — today — Today画面: ポイント残高・達成ストリーク・キャラクター表示
   - Surfaced by: Next Steps 日曜日
   - Files: `app/today.tsx`
   - Verify: 手動QA
-- [ ] **T11 (P2, human: ~1h / CC: ~15min)** — today — 励ましメッセージ5トリガーの実装
+- [x] **T11 (P2, human: ~1h / CC: ~15min)** — today — 励ましメッセージ5トリガーの実装
   - Surfaced by: Next Steps 日曜日
   - Files: `lib/messages.ts`
   - Verify: 手動QA（Test Plan Artifactのエッジケース参照）
-- [ ] **T12 (P2, human: ~30min / CC: ~10min)** — settings — 記録取り消し機能（親のみ、PIN要、再打刻・時刻修正なし）
+- [x] **T12 (P2, human: ~30min / CC: ~10min)** — settings — 記録取り消し機能（親のみ、PIN要、再打刻・時刻修正なし）
   - Surfaced by: 7A (Codex#4)
   - Files: `app/settings.tsx`, `store/entries.ts`
   - Verify: 手動QA
-- [ ] **T13 (P3, human: ~1h / CC: ~15min)** — notifications — expo-notificationsによるローカルリマインダー（任意）
+- [x] **T13 (P3, human: ~1h / CC: ~15min)** — notifications — expo-notificationsによるローカルリマインダー（任意）
   - Surfaced by: Next Steps 任意
   - Files: `lib/notifications.ts`
   - Verify: 手動QA（Expo Go / dev client両方で確認）
-- [ ] **T14 (P1, human: ~1h / CC: ~20min)** — test — データモデル純関数の単体テスト（重複ガード・秒判定・OFF日ストリーク除外・当日目標ロックを含む）
+- [x] **T14 (P1, human: ~1h / CC: ~20min)** — test — データモデル純関数の単体テスト（重複ガード・秒判定・OFF日ストリーク除外・当日目標ロックを含む）
   - Surfaced by: 3A; Failure modes critical gaps
   - Files: `store/entries.test.ts`, `store/schedule.test.ts`
   - Verify: `bun test` (or `jest`) green
