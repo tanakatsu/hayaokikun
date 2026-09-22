@@ -88,11 +88,11 @@ function CancelTodaySection() {
   const today = getLocalDateKey(new Date());
   const [message, setMessage] = useState('');
 
-  // Hooks must run unconditionally on every render, so handleCancel is
+  // Hooks must run unconditionally on every render, so these callbacks are
   // declared before the early-return guard below (e.g. cancelling flips
   // todayEntry.cancelled to true on this same mounted instance, which must
   // not change the number of hooks called).
-  const handleCancel = useCallback(async () => {
+  const performCancel = useCallback(async () => {
     const success = await cancelEntryAndPersist(today);
     if (success) {
       // The success message can't rely on local `message` state: the moment
@@ -104,6 +104,17 @@ function CancelTodaySection() {
       setMessage('取り消しに失敗しました');
     }
   }, [cancelEntryAndPersist, today]);
+
+  const handleCancel = useCallback(() => {
+    Alert.alert(
+      '本日の記録を取り消しますか？',
+      '取り消すと「未記録」扱いに戻ります。本日の再打刻はできません。この操作は元に戻せません。',
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        { text: '取り消す', style: 'destructive', onPress: performCancel },
+      ]
+    );
+  }, [performCancel]);
 
   const todayEntry = entries.entries[today];
   if (!todayEntry || todayEntry.cancelled) return null; // nothing recorded (or already cancelled) — nothing to show
