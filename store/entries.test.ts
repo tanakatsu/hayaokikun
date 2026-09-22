@@ -3,6 +3,7 @@ import {
   DuplicatePunchError,
   computeAchievementStreak,
   computeEntryStatus,
+  computePointsBalance,
   createEmptyEntriesState,
   getDayCalendarStatus,
   isScheduleEditLockedForDate,
@@ -193,5 +194,30 @@ describe('isScheduleEditLockedForDate', () => {
       entries: { ...recorded.entries, '2026-09-21': { ...recorded.entries['2026-09-21'], cancelled: true } },
     };
     expect(isScheduleEditLockedForDate(cancelled, '2026-09-21')).toBe(false);
+  });
+});
+
+describe('computePointsBalance', () => {
+  it('awards 2 points per achieved day and 0 for late/no-record/no-target', () => {
+    const schedule = createInitialSchedule('2026-01-01');
+    let entries = createEmptyEntriesState();
+    entries = recordPunchIn(entries, '2026-09-01', 1, '06:50:00', '07:00:00'); // achieved
+    entries = recordPunchIn(entries, '2026-09-02', 1, '07:10:00', '07:00:00'); // late
+
+    expect(computePointsBalance(entries, schedule)).toBe(2);
+  });
+
+  it('excludes a cancelled achieved entry from the total', () => {
+    const schedule = createInitialSchedule('2026-01-01');
+    let entries = recordPunchIn(createEmptyEntriesState(), '2026-09-01', 1, '06:50:00', '07:00:00');
+    entries = {
+      entries: { ...entries.entries, '2026-09-01': { ...entries.entries['2026-09-01'], cancelled: true } },
+    };
+
+    expect(computePointsBalance(entries, schedule)).toBe(0);
+  });
+
+  it('never goes negative', () => {
+    expect(computePointsBalance(createEmptyEntriesState(), createInitialSchedule('2026-01-01'))).toBe(0);
   });
 });

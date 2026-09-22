@@ -3,6 +3,7 @@ import { AppState, Pressable, Text, View } from 'react-native';
 import { useAppStore } from '../store/useAppStore';
 import { getLocalDateKey, getLocalTimeOfDay, isWithinPunchWindow } from '../store/dateUtils';
 import { getEffectiveRule } from '../store/schedule';
+import { computeAchievementStreak, computePointsBalance, getDayCalendarStatus } from '../store/entries';
 import type { DayOfWeek } from '../store/types';
 
 export default function TodayScreen() {
@@ -14,6 +15,17 @@ export default function TodayScreen() {
   const [canPunch, setCanPunch] = useState(false);
   const [reason, setReason] = useState('読み込み中です…');
   const isPunchingRef = useRef(false);
+
+  const today = getLocalDateKey(new Date());
+  const points = hydrated ? computePointsBalance(entries, schedule) : 0;
+  const streak = hydrated ? computeAchievementStreak(entries, schedule, today) : 0;
+  const todayStatus = hydrated ? getDayCalendarStatus(entries, schedule, today) : 'no-record';
+  const CHARACTER: Record<typeof todayStatus, string> = {
+    achieved: '😄',
+    late: '😥',
+    'no-record': '😴',
+    'no-target': '😌',
+  };
 
   useEffect(() => {
     if (!hydrated) hydrate();
@@ -92,6 +104,9 @@ export default function TodayScreen() {
 
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+      <Text style={{ fontSize: 48 }}>{CHARACTER[todayStatus]}</Text>
+      <Text style={{ fontSize: 18 }}>ポイント: {points}</Text>
+      <Text style={{ fontSize: 14 }}>連続達成: {streak}日</Text>
       <Pressable
         onPress={handlePunch}
         disabled={!canPunch}

@@ -47,6 +47,18 @@ export function getDayCalendarStatus(
   return entry.status;
 }
 
+const POINTS_PER_ACHIEVED_DAY = 2;
+
+export function computePointsBalance(entries: EntriesState, schedule: WeeklyScheduleState): number {
+  let total = 0;
+  for (const date of Object.keys(entries.entries)) {
+    if (getDayCalendarStatus(entries, schedule, date) === 'achieved') {
+      total += POINTS_PER_ACHIEVED_DAY;
+    }
+  }
+  return Math.max(0, total);
+}
+
 // Defensive cap so a schedule with no history yet (or a huge gap) can't
 // spin forever; ~10 years of daily lookback is far beyond any real pilot.
 const MAX_STREAK_LOOKBACK_DAYS = 3650;
