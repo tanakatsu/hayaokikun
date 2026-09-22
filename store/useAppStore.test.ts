@@ -4,6 +4,8 @@ import { createEmptyEntriesState } from './entries';
 import { createInitialSchedule } from './schedule';
 import * as persistence from './persistence';
 import { createAppStore } from './useAppStore';
+import { getLocalDateKey, addDaysToDateKey } from './dateUtils';
+import type { DayOfWeek } from './types';
 
 const mockedPersistence = persistence as jest.Mocked<typeof persistence>;
 
@@ -52,6 +54,13 @@ describe('useAppStore punchIn', () => {
 });
 
 describe('useAppStore addScheduleRuleAndPersist', () => {
+  // Derived from the real clock at test-run time (never hardcoded), so these
+  // tests remain correct regardless of what day they actually run on.
+  const today = getLocalDateKey(new Date());
+  const todayDayOfWeek = new Date().getDay() as DayOfWeek;
+  const tomorrow = addDaysToDateKey(today, 1);
+  const differentDayOfWeek = ((todayDayOfWeek + 1) % 7) as DayOfWeek;
+
   beforeEach(() => {
     jest.resetAllMocks();
     mockedPersistence.loadEntriesState.mockResolvedValue(createEmptyEntriesState());
@@ -63,13 +72,13 @@ describe('useAppStore addScheduleRuleAndPersist', () => {
     mockedPersistence.saveEntriesState.mockResolvedValue(undefined);
     const store = createAppStore();
     await store.getState().hydrate();
-    await store.getState().punchIn('2026-09-21', 1000, '06:55:00', '07:00:00');
+    await store.getState().punchIn(today, 1000, '06:55:00', '07:00:00');
 
     const success = await store.getState().addScheduleRuleAndPersist({
-      dayOfWeek: 1,
+      dayOfWeek: todayDayOfWeek,
       enabled: true,
       targetTime: '08:00:00',
-      effectiveFrom: '2026-09-21',
+      effectiveFrom: today,
     });
 
     expect(success).toBe(false);
@@ -80,13 +89,13 @@ describe('useAppStore addScheduleRuleAndPersist', () => {
     mockedPersistence.saveEntriesState.mockResolvedValue(undefined);
     const store = createAppStore();
     await store.getState().hydrate();
-    await store.getState().punchIn('2026-09-21', 1000, '06:55:00', '07:00:00');
+    await store.getState().punchIn(today, 1000, '06:55:00', '07:00:00');
 
     const success = await store.getState().addScheduleRuleAndPersist({
-      dayOfWeek: 1,
+      dayOfWeek: todayDayOfWeek,
       enabled: true,
       targetTime: '08:00:00',
-      effectiveFrom: '2026-09-22',
+      effectiveFrom: tomorrow,
     });
 
     expect(success).toBe(true);
@@ -97,14 +106,14 @@ describe('useAppStore addScheduleRuleAndPersist', () => {
     mockedPersistence.saveEntriesState.mockResolvedValue(undefined);
     const store = createAppStore();
     await store.getState().hydrate();
-    // 2026-09-22 is a Tuesday (dayOfWeek 2); punch today, then edit Wednesday's (dayOfWeek 3) rule.
-    await store.getState().punchIn('2026-09-22', 1000, '06:55:00', '07:00:00');
+    // Punch today, then edit a rule for a different day of the week, effective today.
+    await store.getState().punchIn(today, 1000, '06:55:00', '07:00:00');
 
     const success = await store.getState().addScheduleRuleAndPersist({
-      dayOfWeek: 3,
+      dayOfWeek: differentDayOfWeek,
       enabled: true,
       targetTime: '08:00:00',
-      effectiveFrom: '2026-09-22',
+      effectiveFrom: today,
     });
 
     expect(success).toBe(true);

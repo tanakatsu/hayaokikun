@@ -50,7 +50,7 @@ describe('selectEncouragementMessage', () => {
   it('fires the first-ever-unachieved message on the very first late day', () => {
     const schedule = createInitialSchedule('2026-01-01');
     const entries = recordPunchIn(createEmptyEntriesState(), '2026-09-21', 1, '07:10:00', '07:00:00');
-    expect(selectEncouragementMessage(entries, schedule, '2026-09-21')).toMatch(/遅かった|また明日/);
+    expect(selectEncouragementMessage(entries, schedule, '2026-09-21')).toMatch(/遅かった/);
   });
 
   it('prefers the streak-broken message over the first-unachieved message when both apply', () => {
