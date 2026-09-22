@@ -1,4 +1,4 @@
-import { buildMarkedStatusesForMonth } from './calendar';
+import { buildMarkedStatusesForMonth } from '../app/calendar';
 import { createEmptyEntriesState, recordPunchIn } from '../store/entries';
 import { createInitialSchedule, addScheduleRule } from '../store/schedule';
 import type { DayOfWeek } from '../store/types';
