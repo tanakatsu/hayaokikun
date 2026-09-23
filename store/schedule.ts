@@ -49,3 +49,21 @@ export function getEffectiveRule(
   // one (a same-day correction) wins.
   return candidates.reduce((latest, r) => (r.effectiveFrom >= latest.effectiveFrom ? r : latest));
 }
+
+// Adds a synthetic default rule (enabled, DEFAULT_TARGET_TIME) for any weekday
+// with no rule of its own as of `asOf`, so the UI has sensible defaults before
+// the parent has ever saved that day. Only for display: callers must persist
+// the pre-synthesis schedule, never this function's output, or every synthetic
+// default gets written to storage as if the parent had explicitly saved it.
+export function withDefaultRules(schedule: WeeklyScheduleState, asOf: DateKey): WeeklyScheduleState {
+  const allDays: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
+  const missingDays = allDays.filter((dayOfWeek) => getEffectiveRule(schedule, dayOfWeek, asOf) === undefined);
+  if (missingDays.length === 0) return schedule;
+  const defaults: ScheduleRule[] = missingDays.map((dayOfWeek) => ({
+    dayOfWeek,
+    enabled: true,
+    targetTime: DEFAULT_TARGET_TIME,
+    effectiveFrom: asOf,
+  }));
+  return { rules: [...schedule.rules, ...defaults] };
+}

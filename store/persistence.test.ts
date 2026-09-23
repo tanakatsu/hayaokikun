@@ -48,11 +48,15 @@ describe('persistence', () => {
   it('round-trips schedule state through save and load', async () => {
     const state = createInitialSchedule('2026-09-21');
     await saveScheduleState(state);
-    expect(await loadScheduleState('2099-01-01')).toEqual(state);
+    expect(await loadScheduleState()).toEqual(state);
   });
 
-  it('falls back to a fresh default schedule when the saved JSON is corrupt', async () => {
+  it('returns an empty schedule when nothing was ever saved', async () => {
+    expect(await loadScheduleState()).toEqual({ rules: [] });
+  });
+
+  it('falls back to an empty schedule when the saved JSON is corrupt', async () => {
     await AsyncStorage.setItem(SCHEDULE_STORAGE_KEY, '{not valid json');
-    expect(await loadScheduleState('2026-09-21')).toEqual(createInitialSchedule('2026-09-21'));
+    expect(await loadScheduleState()).toEqual({ rules: [] });
   });
 });

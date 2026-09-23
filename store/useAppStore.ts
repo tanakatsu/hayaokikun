@@ -8,7 +8,7 @@ import {
   cancelEntry,
   NoEntryToCancelError,
 } from './entries';
-import { createInitialSchedule, addScheduleRule } from './schedule';
+import { createInitialSchedule, addScheduleRule, withDefaultRules } from './schedule';
 import { getLocalDateKey } from './dateUtils';
 import { loadEntriesState, loadScheduleState, saveEntriesState, saveScheduleState } from './persistence';
 
@@ -22,7 +22,8 @@ type LastError =
 
 interface AppStoreState {
   entries: EntriesState;
-  schedule: WeeklyScheduleState;
+  schedule: WeeklyScheduleState; // display value: scheduleRaw + synthetic defaults for untouched days
+  scheduleRaw: WeeklyScheduleState; // exactly what's persisted (or about to be)
   hydrated: boolean;
   lastError: LastError;
   hydrate: () => Promise<void>;
@@ -40,13 +41,14 @@ export function createAppStore() {
   return create<AppStoreState>((set, get) => ({
     entries: createEmptyEntriesState(),
     schedule: createInitialSchedule(getLocalDateKey(new Date())),
+    scheduleRaw: { rules: [] },
     hydrated: false,
     lastError: null,
 
     hydrate: async () => {
       const today = getLocalDateKey(new Date());
-      const [entries, schedule] = await Promise.all([loadEntriesState(), loadScheduleState(today)]);
-      set({ entries, schedule, hydrated: true });
+      const [entries, scheduleRaw] = await Promise.all([loadEntriesState(), loadScheduleState()]);
+      set({ entries, scheduleRaw, schedule: withDefaultRules(scheduleRaw, today), hydrated: true });
     },
 
     punchIn: async (date, punchedAtEpochMs, punchedAtLocalTime, targetTimeSnapshot) => {
@@ -92,9 +94,13 @@ export function createAppStore() {
         return false;
       }
       try {
-        const next = addScheduleRule(get().schedule, rule);
-        await saveScheduleState(next);
-        set({ schedule: next, lastError: null });
+        // Append onto scheduleRaw (only ever what's actually been saved
+        // before), never onto the display `schedule`, which also carries
+        // synthetic defaults for days the parent hasn't touched — appending
+        // onto that would persist those defaults as if explicitly saved.
+        const nextRaw = addScheduleRule(get().scheduleRaw, rule);
+        await saveScheduleState(nextRaw);
+        set({ scheduleRaw: nextRaw, schedule: withDefaultRules(nextRaw, today), lastError: null });
         return true;
       } catch {
         set({ lastError: 'save-failed' });

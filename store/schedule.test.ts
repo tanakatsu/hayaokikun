@@ -5,6 +5,7 @@ import {
   createInitialSchedule,
   getEffectiveRule,
   isValidTargetTime,
+  withDefaultRules,
 } from './schedule';
 import type { WeeklyScheduleState } from './types';
 
@@ -112,5 +113,35 @@ describe('getEffectiveRule', () => {
       effectiveFrom: '2024-01-01', // same-day correction
     });
     expect(getEffectiveRule(s, 6, '2024-01-01')?.enabled).toBe(false);
+  });
+});
+
+describe('withDefaultRules', () => {
+  it('fills every weekday with a default when the schedule has no rules at all', () => {
+    const withDefaults = withDefaultRules({ rules: [] }, '2026-01-01');
+    expect(withDefaults.rules).toHaveLength(7);
+    for (let dayOfWeek = 0; dayOfWeek <= 6; dayOfWeek++) {
+      expect(getEffectiveRule(withDefaults, dayOfWeek as 0, '2026-01-01')).toEqual({
+        dayOfWeek,
+        enabled: true,
+        targetTime: DEFAULT_TARGET_TIME,
+        effectiveFrom: '2026-01-01',
+      });
+    }
+  });
+
+  it('does not add a default for a day that already has a rule', () => {
+    const schedule = addScheduleRule(
+      { rules: [] },
+      { dayOfWeek: 1, enabled: true, targetTime: '07:15:00', effectiveFrom: '2026-01-01' }
+    );
+    const withDefaults = withDefaultRules(schedule, '2026-01-01');
+    expect(withDefaults.rules).toHaveLength(7); // 1 explicit + 6 synthesized
+    expect(getEffectiveRule(withDefaults, 1, '2026-01-01')?.targetTime).toBe('07:15:00');
+  });
+
+  it('returns the same schedule unchanged when every day already has a rule', () => {
+    const schedule = createInitialSchedule('2026-01-01');
+    expect(withDefaultRules(schedule, '2026-01-01')).toBe(schedule);
   });
 });
