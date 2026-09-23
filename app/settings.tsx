@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { useCallback, useState, type ChangeEvent } from 'react';
+import { Alert, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useAppStore } from '../store/useAppStore';
 import { verifyPin } from '../store/pin';
@@ -40,10 +40,27 @@ function ScheduleRow({ dayOfWeek }: { dayOfWeek: DayOfWeek }) {
   const isTodayRow = dayOfWeek === todayDayOfWeek;
   const locked = isTodayRow && isScheduleEditLockedForDate(entries, today);
 
-  const handleTimeChange = useCallback((_event: DateTimePickerEvent, selected?: Date) => {
-    setPickerOpen(false);
+  const handleTimeChange = useCallback((event: DateTimePickerEvent, selected?: Date) => {
+    // Android's "default" display is a modal dialog: onChange fires exactly
+    // once, on confirm ('set') or cancel ('dismissed'), so it's safe to close
+    // right away. iOS's "default" display is an inline spinner with no
+    // confirm gesture of its own: onChange fires on every tick while
+    // scrolling, so closing here would dismiss it before the user finishes
+    // (the picker is instead closed by the iOS-only "完了" button below).
+    if (Platform.OS === 'android') {
+      setPickerOpen(false);
+    }
+    if (event.type === 'dismissed') {
+      setPickerOpen(false);
+      return;
+    }
     if (!selected) return;
     setTargetTime(dateToTimeOfDay(selected));
+  }, []);
+
+  const handleWebTimeChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.value) return;
+    setTargetTime(`${e.target.value}:00`);
   }, []);
 
   const handleSave = useCallback(async () => {
@@ -65,9 +82,15 @@ function ScheduleRow({ dayOfWeek }: { dayOfWeek: DayOfWeek }) {
       <Text style={{ width: 24 }}>{WEEKDAY_LABELS[dayOfWeek]}</Text>
       <Switch value={enabled} onValueChange={setEnabled} disabled={locked} />
       {enabled ? (
-        <Pressable onPress={() => !locked && setPickerOpen(true)} disabled={locked}>
-          <Text>{targetTime.slice(0, 5)}</Text>
-        </Pressable>
+        Platform.OS === 'web' ? (
+          // @react-native-community/datetimepicker has no web implementation
+          // (it renders null there), so the browser's own time input is used.
+          <input type="time" value={targetTime.slice(0, 5)} disabled={locked} onChange={handleWebTimeChange} />
+        ) : (
+          <Pressable onPress={() => !locked && setPickerOpen(true)} disabled={locked}>
+            <Text>{targetTime.slice(0, 5)}</Text>
+          </Pressable>
+        )
       ) : (
         <Text style={{ color: '#9E9E9E' }}>－</Text>
       )}
@@ -76,7 +99,14 @@ function ScheduleRow({ dayOfWeek }: { dayOfWeek: DayOfWeek }) {
       </Pressable>
       {message ? <Text style={{ fontSize: 12 }}>{message}</Text> : null}
       {pickerOpen ? (
-        <DateTimePicker value={timeOfDayToDate(targetTime)} mode="time" is24Hour onChange={handleTimeChange} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <DateTimePicker value={timeOfDayToDate(targetTime)} mode="time" is24Hour onChange={handleTimeChange} />
+          {Platform.OS === 'ios' ? (
+            <Pressable onPress={() => setPickerOpen(false)} style={{ padding: 8 }}>
+              <Text>完了</Text>
+            </Pressable>
+          ) : null}
+        </View>
       ) : null}
     </View>
   );
