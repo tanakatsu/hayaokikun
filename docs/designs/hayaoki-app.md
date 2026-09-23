@@ -144,8 +144,7 @@ Approach C（バランス型）。週末〜1週間で完成でき、見た目の
 - **OSのスマホ使用時間制限への直接連携**（ポイント→使用時間変換） — Apple Family Controls entitlementの審査・承認が必要で、技術的難易度とMVPの検証目的に見合わないため範囲外。
 - **アカウント機能・クラウド同期** — 単一端末・単一利用者のみのMVPには不要。
 - **バックアップ/JSON書き出し機能** — 7日間のパイロット運用ではデータ消失リスクを許容するため、初期リリースでは実装しない（Open Questions参照）。
-- **自動E2E/UIテスト** — 週末個人プロジェクトの導入コストに見合わないと判断し、データモデルの純関数のみ単体テスト化する（3Aの決定）。
-- **CI/CDパイプライン** — 個人・家族利用のみで手動ビルド・手動インストールのため不要。
+- **CI/CDパイプライン** — 個人・家族利用のみで手動ビルド・手動インストールのため不要。自動E2E/UIテスト（T15、下記）もローカル実行のみで、CIには組み込まない。
 
 ## Failure modes
 
@@ -175,7 +174,7 @@ Sequential implementation, no parallelization opportunity. 単一開発者によ
 
 Synthesized from this review's findings. Each task derives from a specific finding above. Run with Claude Code or Codex; checkbox as you ship.
 
-**Status: 全14件完了・mainにマージ済み（2026-09-22）。** T1〜T7は土曜日スコープ（実装計画: `docs/superpowers/plans/2026-09-21-hayaoki-store-foundation.md`）、T8〜T14は日曜日スコープ＋任意項目（実装計画: `docs/superpowers/plans/2026-09-22-hayaoki-calendar-ui-notifications.md`）で実装。T9実装時に、当日打刻ロックが本来ロックすべき曜日以外の設定変更まで巻き込んでブロックしていたバグを発見・修正（T5時点では単一曜日編集のみだったため表面化していなかった）。
+**Status: 全15件完了・mainにマージ済み（2026-09-22〜23）。** T1〜T7は土曜日スコープ（実装計画: `docs/superpowers/plans/2026-09-21-hayaoki-store-foundation.md`）、T8〜T14は日曜日スコープ＋任意項目（実装計画: `docs/superpowers/plans/2026-09-22-hayaoki-calendar-ui-notifications.md`）で実装。T9実装時に、当日打刻ロックが本来ロックすべき曜日以外の設定変更まで巻き込んでブロックしていたバグを発見・修正（T5時点では単一曜日編集のみだったため表面化していなかった）。T15（UIテスト追加、2026-09-23）実装時に、さらに2件の実バグを発見・修正（詳細はT15参照）。
 
 - [x] **T1 (P1, human: ~3h / CC: ~30min)** — store — Entry/WeeklyScheduleのデータ型定義・重複打刻ガード・秒単位達成判定
   - Surfaced by: Next Steps 土曜日; Codex#1/#6
@@ -233,6 +232,17 @@ Synthesized from this review's findings. Each task derives from a specific findi
   - Surfaced by: 3A; Failure modes critical gaps
   - Files: `store/entries.test.ts`, `store/schedule.test.ts`
   - Verify: `bun test` (or `jest`) green
+- [x] **T15 (P2, human: ~2h / CC: ~1h)** — test — UI/E2Eテストの追加（旧NOT in scope決定の撤回）
+  - Surfaced by: ユーザー要望（2026-09-23）。旧3A決定（自動E2E/UIテストはスコープ外）を撤回し、スコープに含めた。
+  - 動機: 手動QAが「日をまたぐ検証」（打刻有効時間帯・ストリーク・曜日設定の有効開始日）を含み時間がかかりすぎるため、日を自由に早送りできる自動テストで置き換える。
+  - アプローチ: Playwright + `expo start --web`（react-native-web）。ブラウザのJS時刻を`page.clock`で仮想化し、実際の日をまたがずに複数日シナリオ（連続達成ストリーク、曜日設定の有効開始日など）を検証する。CI/CDには組み込まず、ローカル実行のみ（`npm run test:e2e`）。
+  - カバー範囲: 打刻の有効時間帯・重複ガード・OFF曜日、遅刻判定とストリーク断ち、PIN保護、当日目標ロック（曜日単位）、曜日設定変更の非遡及性、記録取り消し、カレンダー4状態表示、OFF日を挟むストリーク継続、3日/7日連続達成・初回達成・初回未達成・ストリーク断絶時の励ましメッセージ。
+  - Files: `playwright.config.ts`, `e2e/*.ts`、`app/today.tsx`・`app/settings.tsx`・`app/calendar.tsx`（`testID`/`accessibilityLabel`の追加）
+  - Verify: `npm run test:e2e` green（14件）
+  - **副産物として発見・修正した実バグ2件**（UIテストでなければ次回パイロットまで気づかなかった可能性が高い）:
+    1. `today.tsx`の`handlePunch`が打刻成功後も古いクロージャの`entries`で`reevaluate()`を呼び直しており、正しく無効化されたはずの打刻ボタンが次の自然な再評価（30秒ごとのインターバル等）までタップ可能なまま見えていた。成功時は明示呼び出しをやめ、ストアの状態更新に伴う自動再評価に委ねる形に修正。
+    2. `store/schedule.ts`の`withDefaultRules`が生成する「未保存曜日のデフォルトルール」の`effectiveFrom`が、**再hydrate（＝アプリ再起動）のたびにその時点の「今日」へズレる**仕様だった。親が一度もSettingsを保存しないまま運用すると、アプリを（OSに落とされて）再起動しただけで、それ以前の日がすべて「目標なし」扱いになり、達成記録がカレンダー・ストリーク・ポイントから消えて見える不具合があった。`useAppStore.ts`の`hydrate()`で、未保存時は初回にデフォルトスケジュールを実際に永続化するよう修正（`effectiveFrom`を固定）。
+  - また、react-native-web版の`Alert.alert`が no-op であることが判明したため（ネイティブ版は問題なし）、`app/settings.tsx`の記録取り消し確認・完了ダイアログをWebでは`window.confirm`/`window.alert`にフォールバックするよう修正（Web版プレビュー・E2Eテストの両方で確認ダイアログが機能するように）。
 
 ## GSTACK REVIEW REPORT
 
