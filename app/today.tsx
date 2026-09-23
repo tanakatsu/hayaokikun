@@ -17,7 +17,9 @@ export default function TodayScreen() {
   const [reason, setReason] = useState('読み込み中です…');
   const isPunchingRef = useRef(false);
 
-  const today = getLocalDateKey(new Date());
+  const now = new Date();
+  const today = getLocalDateKey(now);
+  const todayLabel = now.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
   const points = hydrated ? computePointsBalance(entries, schedule) : 0;
   const streak = hydrated ? computeAchievementStreak(entries, schedule, today) : 0;
   const todayStatus = hydrated ? getDayCalendarStatus(entries, schedule, today) : 'no-record';
@@ -109,6 +111,7 @@ export default function TodayScreen() {
 
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+      <Text style={{ fontSize: 16, color: '#616161' }}>{todayLabel}</Text>
       <Text style={{ fontSize: 48 }}>{CHARACTER[todayStatus]}</Text>
       <Text style={{ fontSize: 18 }}>ポイント: {points}</Text>
       <Text style={{ fontSize: 14 }}>連続達成: {streak}日</Text>

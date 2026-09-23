@@ -30,10 +30,13 @@ export function buildMarkedStatusesForMonth(
   return marked;
 }
 
-function CalendarDay({ date, marking }: { date?: DateData; marking?: { status?: DayStatus } }) {
+const TODAY_COLOR = '#1976D2';
+
+function CalendarDay({ date, marking }: { date?: DateData; marking?: { status?: DayStatus; isToday?: boolean } }) {
   if (!date) return null;
   const status = marking?.status ?? 'no-target';
   const style = STATUS_STYLE[status];
+  const isToday = marking?.isToday ?? false;
   return (
     <View
       style={{
@@ -43,12 +46,12 @@ function CalendarDay({ date, marking }: { date?: DateData; marking?: { status?: 
         justifyContent: 'center',
         backgroundColor: style.bg,
         borderRadius: 6,
-        borderWidth: style.border === 'none' ? 0 : 1.5,
-        borderStyle: style.border === 'none' ? 'solid' : style.border,
-        borderColor: style.fg,
+        borderWidth: isToday ? 2 : style.border === 'none' ? 0 : 1.5,
+        borderStyle: isToday || style.border === 'none' ? 'solid' : style.border,
+        borderColor: isToday ? TODAY_COLOR : style.fg,
       }}
     >
-      <Text style={{ color: style.fg, fontWeight: '600' }}>{date.day}</Text>
+      <Text style={{ color: style.fg, fontWeight: isToday ? '800' : '600' }}>{date.day}</Text>
       <Text style={{ color: style.fg, fontSize: 10, lineHeight: 12 }}>{style.glyph}</Text>
     </View>
   );
@@ -67,12 +70,12 @@ export default function CalendarScreen() {
   );
 
   const markedDates = useMemo(() => {
-    const result: Record<string, { status: DayStatus }> = {};
+    const result: Record<string, { status: DayStatus; isToday: boolean }> = {};
     for (const [dateKey, status] of Object.entries(marked)) {
-      result[dateKey] = { status };
+      result[dateKey] = { status, isToday: dateKey === today };
     }
     return result;
-  }, [marked]);
+  }, [marked, today]);
 
   return (
     <View style={{ flex: 1, paddingTop: 12 }}>
@@ -101,6 +104,7 @@ export default function CalendarScreen() {
         <Text>△ 未達成</Text>
         <Text>・ 未記録</Text>
         <Text style={{ color: '#9E9E9E' }}>（空欄）目標なし</Text>
+        <Text style={{ color: TODAY_COLOR, fontWeight: '700' }}>枠線＝今日</Text>
       </View>
     </View>
   );
