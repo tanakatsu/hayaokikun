@@ -58,7 +58,7 @@ export function getDayCalendarStatus(
   return entry.status;
 }
 
-const POINTS_PER_ACHIEVED_DAY = 2;
+const POINTS_PER_ACHIEVED_DAY = 1;
 
 export function computePointsBalance(entries: EntriesState, schedule: WeeklyScheduleState): number {
   let total = 0;

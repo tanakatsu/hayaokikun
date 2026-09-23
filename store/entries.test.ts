@@ -244,13 +244,13 @@ describe('cancelEntry', () => {
 });
 
 describe('computePointsBalance', () => {
-  it('awards 2 points per achieved day and 0 for late/no-record/no-target', () => {
+  it('awards 1 point per achieved day and 0 for late/no-record/no-target', () => {
     const schedule = createInitialSchedule('2026-01-01');
     let entries = createEmptyEntriesState();
     entries = recordPunchIn(entries, '2026-09-01', 1, '06:50:00', '07:00:00'); // achieved
     entries = recordPunchIn(entries, '2026-09-02', 1, '07:10:00', '07:00:00'); // late
 
-    expect(computePointsBalance(entries, schedule)).toBe(2);
+    expect(computePointsBalance(entries, schedule)).toBe(1);
   });
 
   it('excludes a cancelled achieved entry from the total', () => {
