@@ -1,3 +1,4 @@
+import { MAX_TARGET_TIME, MIN_TARGET_TIME } from './config';
 import {
   addDaysToDateKey,
   dateKeyToDayOfWeek,
@@ -50,9 +51,9 @@ describe('addDaysToDateKey', () => {
 });
 
 describe('isWithinPunchWindow', () => {
-  it('accepts the boundaries 04:00:00 and 12:00:00 inclusive', () => {
-    expect(isWithinPunchWindow('04:00:00')).toBe(true);
-    expect(isWithinPunchWindow('12:00:00')).toBe(true);
+  it('accepts the configured boundaries inclusive', () => {
+    expect(isWithinPunchWindow(MIN_TARGET_TIME)).toBe(true);
+    expect(isWithinPunchWindow(MAX_TARGET_TIME)).toBe(true);
   });
 
   it('rejects times just outside the window', () => {

@@ -1,3 +1,4 @@
+import { DEFAULT_TARGET_TIME, MAX_TARGET_TIME, MIN_TARGET_TIME } from './config';
 import {
   InvalidTargetTimeError,
   addScheduleRule,
@@ -16,7 +17,7 @@ describe('createInitialSchedule', () => {
       expect(rule).toEqual({
         dayOfWeek,
         enabled: true,
-        targetTime: '07:00:00',
+        targetTime: DEFAULT_TARGET_TIME,
         effectiveFrom: '2026-01-01',
       });
     }
@@ -25,8 +26,8 @@ describe('createInitialSchedule', () => {
 
 describe('isValidTargetTime', () => {
   it('accepts the boundaries', () => {
-    expect(isValidTargetTime('04:00:00')).toBe(true);
-    expect(isValidTargetTime('12:00:00')).toBe(true);
+    expect(isValidTargetTime(MIN_TARGET_TIME)).toBe(true);
+    expect(isValidTargetTime(MAX_TARGET_TIME)).toBe(true);
   });
 
   it('rejects times outside the boundaries', () => {
