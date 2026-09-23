@@ -1,11 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DEFAULT_PARENT_PIN } from './config';
 
 const PIN_STORAGE_KEY = 'hayaoki:parentPin:v1';
-const DEFAULT_PIN = '0000';
 
 export async function getStoredPin(): Promise<string> {
   const raw = await AsyncStorage.getItem(PIN_STORAGE_KEY);
-  return raw ?? DEFAULT_PIN;
+  return raw ?? DEFAULT_PARENT_PIN;
 }
 
 export async function setStoredPin(pin: string): Promise<void> {

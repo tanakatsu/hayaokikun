@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Pressable, Text, View } from 'react-native';
 import { useAppStore } from '../store/useAppStore';
+import { MAX_TARGET_TIME, MIN_TARGET_TIME } from '../store/config';
 import { getLocalDateKey, getLocalTimeOfDay, isWithinPunchWindow } from '../store/dateUtils';
 import { getEffectiveRule } from '../store/schedule';
 import { computeAchievementStreak, computePointsBalance, getDayCalendarStatus } from '../store/entries';
@@ -59,7 +60,7 @@ export default function TodayScreen() {
       setReason('本日は目標が設定されていません');
     } else if (!isWithinPunchWindow(timeOfDay)) {
       setCanPunch(false);
-      setReason('打刻できるのは04:00〜12:00の間だけです');
+      setReason(`打刻できるのは${MIN_TARGET_TIME.slice(0, 5)}〜${MAX_TARGET_TIME.slice(0, 5)}の間だけです`);
     } else {
       setCanPunch(true);
       setReason('');

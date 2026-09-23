@@ -1,3 +1,4 @@
+import { MAX_TARGET_TIME, MIN_TARGET_TIME } from './config';
 import type { DateKey, DayOfWeek, TimeOfDay } from './types';
 
 function pad(n: number, width: number): string {
@@ -27,5 +28,5 @@ export function addDaysToDateKey(date: DateKey, delta: number): DateKey {
 }
 
 export function isWithinPunchWindow(timeOfDay: TimeOfDay): boolean {
-  return timeOfDay >= '04:00:00' && timeOfDay <= '12:00:00';
+  return timeOfDay >= MIN_TARGET_TIME && timeOfDay <= MAX_TARGET_TIME;
 }

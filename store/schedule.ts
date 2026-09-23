@@ -1,8 +1,7 @@
+import { DEFAULT_TARGET_TIME, MAX_TARGET_TIME, MIN_TARGET_TIME } from './config';
 import type { DateKey, DayOfWeek, ScheduleRule, TimeOfDay, WeeklyScheduleState } from './types';
 
-export const MIN_TARGET_TIME: TimeOfDay = '04:00:00';
-export const MAX_TARGET_TIME: TimeOfDay = '12:00:00';
-export const DEFAULT_TARGET_TIME: TimeOfDay = '07:00:00';
+export { DEFAULT_TARGET_TIME, MAX_TARGET_TIME, MIN_TARGET_TIME };
 
 export class InvalidTargetTimeError extends Error {}
 

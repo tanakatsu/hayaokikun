@@ -5,6 +5,7 @@ import { useAppStore } from '../store/useAppStore';
 import { verifyPin } from '../store/pin';
 import { getLocalDateKey } from '../store/dateUtils';
 import { getDayCalendarStatus, isScheduleEditLockedForDate } from '../store/entries';
+import { MAX_TARGET_TIME, MIN_TARGET_TIME } from '../store/config';
 import { DEFAULT_TARGET_TIME, getEffectiveRule, isValidTargetTime } from '../store/schedule';
 import type { DayOfWeek, TimeOfDay } from '../store/types';
 
@@ -47,7 +48,7 @@ function ScheduleRow({ dayOfWeek }: { dayOfWeek: DayOfWeek }) {
 
   const handleSave = useCallback(async () => {
     if (enabled && !isValidTargetTime(targetTime)) {
-      setMessage('目標時刻は04:00〜12:00の範囲で入力してください');
+      setMessage(`目標時刻は${MIN_TARGET_TIME.slice(0, 5)}〜${MAX_TARGET_TIME.slice(0, 5)}の範囲で入力してください`);
       return;
     }
     const success = await addScheduleRuleAndPersist({
