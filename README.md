@@ -1,0 +1,99 @@
+# 早起きくん
+
+子ども向けの起床習慣化アプリ。Expo（React Native）製で、子ども自身のスマホ/タブレットにインストールして使う。曜日ごとに目標起床時刻を設定し、子どもが朝起きて「起きたよ！」ボタンを押すと打刻され、達成状況がカレンダーとポイントで可視化される。
+
+個人・家族利用のみを想定したMVP（アカウント不要・完全オフライン・ストア配信なし）。設計の背景や意思決定の詳細は [`docs/designs/hayaoki-app.md`](docs/designs/hayaoki-app.md) を参照。
+
+## 必要なもの
+
+- Node.js（`npx expo`が動くバージョン）と npm
+- 動作確認用の実機（Android/iOS）に [Expo Go](https://expo.dev/go) アプリ、またはPCにAndroid Studio/Xcodeのシミュレータ
+- スタンドアロンビルドを試す場合は [Expo](https://expo.dev/) アカウント（EAS Buildを使う。詳細は後述）
+
+## セットアップ
+
+```bash
+npm install
+```
+
+## 開発サーバーの起動
+
+```bash
+npm run start    # Expo開発サーバーを起動し、QRコードを表示
+npm run android  # Androidエミュレータ/実機向けに起動
+npm run ios      # iOSシミュレータ向けに起動
+npm run web      # ブラウザ向けに起動（react-native-web。主にE2Eテスト用）
+```
+
+## 動作検証
+
+このアプリの主要な判定（打刻有効時間帯 05:00〜08:00、目標時刻との比較、曜日ON/OFF、ストリーク計算）はすべて「実際の現在時刻」に基づく。そのため検証方法を目的に応じて使い分ける。
+
+| 検証方法 | 向いている用途 | 制約 |
+|---|---|---|
+| 自動テスト（`npm test` / `npm run test:e2e`） | ロジックとUIフローの回帰確認。日をまたぐシナリオも仮想時刻で一瞬で検証できる | 実機固有の挙動（保護者アプリのブロック）は検証できない |
+| Expo Go | 開発中の素早い動作確認 | 保護者アプリ（スクリーンタイム管理）のブロック挙動は、スタンドアロンビルドと異なる可能性がある（バンドルIDが別のため） |
+| Preview build（EAS Build） | 実機配布前の最終確認。実際に子どもが使うのと同じ形（保護者アプリ含む）で確認できる | ビルドに数分〜十数分かかる。iOSは有料のApple Developer Program登録が必要 |
+
+### 自動テスト
+
+```bash
+npm test        # 単体テスト（store配下の純関数：打刻判定・ストリーク計算・永続化など）
+npx playwright install chromium  # E2Eテストの初回のみ（Playwrightのブラウザ本体をインストール）
+npm run test:e2e  # E2Eテスト（Playwright、react-native-web上で実行。画面操作・複数日シナリオを検証）
+```
+
+`test:e2e`は`expo start --web`を自動起動してブラウザ上のJS時刻を仮想化するため、実際に日をまたがずに「複数日連続達成」「曜日設定の有効開始日」などのシナリオを検証できる。詳細は [`e2e/`](e2e/) 以下と `playwright.config.ts` を参照。どちらもCI/CDには組み込まず、ローカル実行のみを想定している。
+
+### Expo Goでの動作検証
+
+1. `npm run start` を実行し、表示されたQRコードを子どもの端末のカメラ（iOS）またはExpo Goアプリ（Android）で読み込む
+2. 初回は完全に打刻していない、まっさらな状態（AsyncStorageが空）から始めるのが望ましい
+3. 05:00〜08:00外の挙動やストリークなど、複数日にまたがる確認をしたい場合は端末の日付/時刻設定を変更してアプリをフォアグラウンドに戻す（このアプリにテスト用の日付注入口はなく、実際の端末時計を見て判定する）。確認後は必ず端末時計を実際の日時に戻すこと
+4. 画面ごとの詳細な確認手順は [`docs/qa/manual-test-checklist.md`](docs/qa/manual-test-checklist.md) のチェックリストに従う
+
+**注意**: Expo Goはバンドル ID が異なるため、保護者アプリ（スクリーンタイム管理など）による早朝時間帯のブロック確認は、スタンドアロンビルドと異なる場合がある。最終確認したい場合は下記のPreview buildを使う（なお、ローカル通知機能はAndroid版Expo Goでのクラッシュが原因で削除済み。`docs/qa/manual-test-checklist.md`参照）。
+
+### Preview buildでの動作検証（EAS Build）
+
+Expo Goでは確認できない、実機にインストールした状態そのもの（保護者アプリのブロック挙動など）を確認したいときに使う。
+
+初回のみ、EAS Buildの設定が必要（このリポジトリにはまだ`eas.json`が存在しないため、最初に一度だけ実行する）:
+
+```bash
+npx eas-cli login          # Expoアカウントでログイン
+npx eas-cli build:configure  # eas.jsonを生成（プラットフォームを聞かれたら対象に応じて選択）
+```
+
+`eas.json`ができたら、`preview`プロファイルでビルドする:
+
+```bash
+npx eas-cli build --platform android --profile preview  # APKが生成される。ビルド完了後のURLからそのまま端末にインストール可能
+npx eas-cli device:create                                 # iOSのみ・初回: 子どもの端末のUDIDを登録（プロビジョニングプロファイルに含めるため必須）
+npx eas-cli build --platform ios --profile preview        # 要Apple Developer Program登録（有料・年次更新）
+```
+
+- Android: ビルド完了後にEASが発行するURLを子どもの端末で開き、APKを直接インストールする。追加コストなし
+- iOS: `eas device:create`で事前に端末を登録していないと、ビルドしても実機にインストールできない（プロビジョニングプロファイルの対象外になるため）。また無料のApple IDだけでは恒久的なスタンドアロンインストールができない（7日で失効し再署名が必要）ため、Apple Developer Program（有料）への登録が実質必須
+- どちらの場合も、インストール後は「0. 準備」からの手動QAチェックリスト（[`docs/qa/manual-test-checklist.md`](docs/qa/manual-test-checklist.md)）を一通り流し、特に保護者アプリのブロック確認を重点的に見る
+
+対象OS・配布方針の詳細な検討経緯は設計書の [Distribution Plan](docs/designs/hayaoki-app.md#distribution-plan) を参照。
+
+## プロジェクト構成
+
+```
+app/              画面（Today / Calendar / Settings、Expo Router）
+store/            データモデル・打刻ロジック・永続化（Zustand + AsyncStorage）。純関数の単体テストが揃っている
+lib/               励ましメッセージ選択ロジックなど
+e2e/               Playwright E2Eテスト
+docs/designs/      設計書（このアプリのWhy/Whatの正）
+docs/qa/           手動QAチェックリスト
+```
+
+各ディレクトリの詳細は `CLAUDE.md` および [`docs/designs/hayaoki-app.md`](docs/designs/hayaoki-app.md) を参照。
+
+## 主な制約（詳細は設計書参照）
+
+- 対象は子ども1人・単一端末での利用を想定。アカウント機能・クラウド同期はなし
+- データはAsyncStorageのみに保存。端末紛失・初期化で履歴が失われるリスクを許容している
+- ポイントの使い道（スマホ使用時間への変換など）は未定義。増減を表示するのみ
