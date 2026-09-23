@@ -53,6 +53,50 @@ describe('useAppStore punchIn', () => {
   });
 });
 
+describe('useAppStore hydrate', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    mockedPersistence.loadEntriesState.mockResolvedValue(createEmptyEntriesState());
+  });
+
+  it('persists default rules on first-ever hydrate, pinned to that day, instead of leaving them synthetic', async () => {
+    mockedPersistence.loadScheduleState.mockResolvedValue({ rules: [] }); // nothing saved yet
+    mockedPersistence.saveScheduleState.mockResolvedValue(undefined);
+    const store = createAppStore();
+
+    await store.getState().hydrate();
+
+    const today = getLocalDateKey(new Date());
+    expect(mockedPersistence.saveScheduleState).toHaveBeenCalledWith(createInitialSchedule(today));
+    expect(store.getState().scheduleRaw).toEqual(createInitialSchedule(today));
+  });
+
+  it('does not overwrite an already-saved schedule on a later hydrate', async () => {
+    const saved = createInitialSchedule('2026-01-01');
+    mockedPersistence.loadScheduleState.mockResolvedValue(saved);
+    const store = createAppStore();
+
+    await store.getState().hydrate();
+
+    expect(mockedPersistence.saveScheduleState).not.toHaveBeenCalled();
+    expect(store.getState().scheduleRaw).toEqual(saved);
+  });
+
+  it('falls back to an in-memory default for this session when persisting it fails', async () => {
+    mockedPersistence.loadScheduleState.mockResolvedValue({ rules: [] });
+    mockedPersistence.saveScheduleState.mockRejectedValue(new Error('disk full'));
+    const store = createAppStore();
+
+    await store.getState().hydrate();
+
+    expect(store.getState().hydrated).toBe(true);
+    expect(store.getState().scheduleRaw).toEqual({ rules: [] });
+    // The in-memory display schedule still has usable defaults for today.
+    const today = getLocalDateKey(new Date());
+    expect(store.getState().schedule).toEqual(createInitialSchedule(today));
+  });
+});
+
 describe('useAppStore addScheduleRuleAndPersist', () => {
   // Derived from the real clock at test-run time (never hardcoded), so these
   // tests remain correct regardless of what day they actually run on.

@@ -47,7 +47,24 @@ export function createAppStore() {
 
     hydrate: async () => {
       const today = getLocalDateKey(new Date());
-      const [entries, scheduleRaw] = await Promise.all([loadEntriesState(), loadScheduleState()]);
+      const [entries, loadedSchedule] = await Promise.all([loadEntriesState(), loadScheduleState()]);
+      let scheduleRaw = loadedSchedule;
+      if (scheduleRaw.rules.length === 0) {
+        // Nothing has ever been saved: persist today's defaults now, with
+        // effectiveFrom pinned to today. Otherwise withDefaultRules would
+        // keep synthesizing them fresh on every relaunch with THAT day's
+        // date, silently retroactively turning every earlier day (including
+        // already-recorded ones) into "no schedule" once the app reopens on
+        // a later day and the parent still hasn't touched Settings.
+        const initial = createInitialSchedule(today);
+        try {
+          await saveScheduleState(initial);
+          scheduleRaw = initial;
+        } catch {
+          // Persistence failed: fall back to an in-memory-only default for
+          // this session; withDefaultRules below still covers today's view.
+        }
+      }
       set({ entries, scheduleRaw, schedule: withDefaultRules(scheduleRaw, today), hydrated: true });
     },
 
