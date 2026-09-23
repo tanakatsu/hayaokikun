@@ -15,6 +15,16 @@ const STATUS_STYLE: Record<DayStatus, { bg: string; fg: string; glyph: string; b
   'no-target': { bg: '#E0E0E0', fg: '#9E9E9E', glyph: '', border: 'none' },
 };
 
+// Exposed via accessibilityLabel (not just the glyph) so both screen readers
+// and tests can identify a day's status unambiguously — 'no-target' has no
+// glyph of its own, and 'achieved'/'late' glyphs alone aren't self-describing.
+export const STATUS_LABEL: Record<DayStatus, string> = {
+  achieved: '達成',
+  late: '未達成（遅刻）',
+  'no-record': '未記録',
+  'no-target': '目標なし',
+};
+
 export function buildMarkedStatusesForMonth(
   entries: EntriesState,
   schedule: WeeklyScheduleState,
@@ -39,6 +49,8 @@ function CalendarDay({ date, marking }: { date?: DateData; marking?: { status?: 
   const isToday = marking?.isToday ?? false;
   return (
     <View
+      testID={`calendar-day-${date.dateString}`}
+      accessibilityLabel={STATUS_LABEL[status]}
       style={{
         width: 34,
         height: 42,

@@ -101,9 +101,17 @@ export default function TodayScreen() {
         return;
       }
       const success = await punchIn(today, now.getTime(), timeOfDay, rule.targetTime);
-      reevaluate();
-      if (!success && useAppStore.getState().lastError !== 'already-punched') {
-        setReason('記録に失敗しました。もう一度お試しください。');
+      if (!success) {
+        // On success, don't call reevaluate() here: this closure's `entries`
+        // is still the pre-punch snapshot (state hasn't re-rendered this
+        // component yet), so it would immediately clobber the correct
+        // post-punch disabled state with a stale "not punched yet" one. The
+        // effect above already re-runs reevaluate() with fresh `entries` once
+        // the store update flows through.
+        reevaluate();
+        if (useAppStore.getState().lastError !== 'already-punched') {
+          setReason('記録に失敗しました。もう一度お試しください。');
+        }
       }
     } finally {
       isPunchingRef.current = false;
@@ -113,18 +121,25 @@ export default function TodayScreen() {
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
       <Text style={{ fontSize: 16, color: '#616161' }}>{todayLabel}</Text>
-      <Text style={{ fontSize: 48 }}>{CHARACTER[todayStatus]}</Text>
-      <Text style={{ fontSize: 18 }}>ポイント: {points}</Text>
-      <Text style={{ fontSize: 14 }}>連続達成: {streak}日</Text>
-      {encouragement ? <Text style={{ fontSize: 14, textAlign: 'center' }}>{encouragement}</Text> : null}
+      <Text testID="status-character" accessibilityLabel={todayStatus} style={{ fontSize: 48 }}>
+        {CHARACTER[todayStatus]}
+      </Text>
+      <Text testID="points-balance" style={{ fontSize: 18 }}>ポイント: {points}</Text>
+      <Text testID="achievement-streak" style={{ fontSize: 14 }}>連続達成: {streak}日</Text>
+      {encouragement ? (
+        <Text testID="encouragement-message" style={{ fontSize: 14, textAlign: 'center' }}>
+          {encouragement}
+        </Text>
+      ) : null}
       <Pressable
+        testID="punch-button"
         onPress={handlePunch}
         disabled={!canPunch}
         style={{ padding: 24, borderRadius: 999, backgroundColor: canPunch ? '#4CAF50' : '#ccc' }}
       >
         <Text style={{ fontSize: 20, color: 'white' }}>起きたよ！</Text>
       </Pressable>
-      {reason ? <Text>{reason}</Text> : null}
+      {reason ? <Text testID="punch-reason">{reason}</Text> : null}
     </View>
   );
 }

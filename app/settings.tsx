@@ -78,14 +78,28 @@ function ScheduleRow({ dayOfWeek }: { dayOfWeek: DayOfWeek }) {
   }, [addScheduleRuleAndPersist, dayOfWeek, enabled, targetTime, today]);
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, opacity: locked ? 0.5 : 1 }}>
+    <View
+      testID={`schedule-row-${dayOfWeek}`}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, opacity: locked ? 0.5 : 1 }}
+    >
       <Text style={{ width: 24 }}>{WEEKDAY_LABELS[dayOfWeek]}</Text>
-      <Switch value={enabled} onValueChange={setEnabled} disabled={locked} />
+      <Switch
+        testID={`schedule-enabled-${dayOfWeek}`}
+        value={enabled}
+        onValueChange={setEnabled}
+        disabled={locked}
+      />
       {enabled ? (
         Platform.OS === 'web' ? (
           // @react-native-community/datetimepicker has no web implementation
           // (it renders null there), so the browser's own time input is used.
-          <input type="time" value={targetTime.slice(0, 5)} disabled={locked} onChange={handleWebTimeChange} />
+          <input
+            type="time"
+            data-testid={`schedule-time-${dayOfWeek}`}
+            value={targetTime.slice(0, 5)}
+            disabled={locked}
+            onChange={handleWebTimeChange}
+          />
         ) : (
           <Pressable onPress={() => !locked && setPickerOpen(true)} disabled={locked}>
             <Text>{targetTime.slice(0, 5)}</Text>
@@ -94,10 +108,10 @@ function ScheduleRow({ dayOfWeek }: { dayOfWeek: DayOfWeek }) {
       ) : (
         <Text style={{ color: '#9E9E9E' }}>－</Text>
       )}
-      <Pressable onPress={handleSave} disabled={locked} style={{ padding: 8 }}>
+      <Pressable testID={`schedule-save-${dayOfWeek}`} onPress={handleSave} disabled={locked} style={{ padding: 8 }}>
         <Text>保存</Text>
       </Pressable>
-      {message ? <Text style={{ fontSize: 12 }}>{message}</Text> : null}
+      {message ? <Text testID={`schedule-message-${dayOfWeek}`} style={{ fontSize: 12 }}>{message}</Text> : null}
       {pickerOpen ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <DateTimePicker value={timeOfDayToDate(targetTime)} mode="time" is24Hour onChange={handleTimeChange} />
@@ -130,13 +144,26 @@ function CancelTodaySection() {
       // cancellation succeeds, todayEntry.cancelled flips to true on the
       // next render, and the component's own guard below unmounts this
       // whole section (message included) before anyone could see it.
-      Alert.alert('取り消しました', '本日の記録を取り消しました');
+      // react-native-web's Alert.alert is a no-op, so the web build (used
+      // for local preview and for the Playwright e2e suite) needs its own
+      // browser-native fallback.
+      if (Platform.OS === 'web') {
+        window.alert('取り消しました\n本日の記録を取り消しました');
+      } else {
+        Alert.alert('取り消しました', '本日の記録を取り消しました');
+      }
     } else {
       setMessage('取り消しに失敗しました');
     }
   }, [cancelEntryAndPersist, today]);
 
   const handleCancel = useCallback(() => {
+    if (Platform.OS === 'web') {
+      if (window.confirm('本日の記録を取り消しますか？\n取り消すと「未記録」扱いに戻ります。本日の再打刻はできません。この操作は元に戻せません。')) {
+        performCancel();
+      }
+      return;
+    }
     Alert.alert(
       '本日の記録を取り消しますか？',
       '取り消すと「未記録」扱いに戻ります。本日の再打刻はできません。この操作は元に戻せません。',
@@ -155,12 +182,14 @@ function CancelTodaySection() {
   return (
     <View style={{ marginTop: 24, gap: 8 }}>
       <Text style={{ fontSize: 16, fontWeight: '600' }}>本日の記録の取り消し</Text>
-      <Text>現在の記録: {status === 'achieved' ? '達成' : '未達成（遅刻）'}（{todayEntry.punchedAtLocalTime}打刻）</Text>
+      <Text testID="cancel-today-status">
+        現在の記録: {status === 'achieved' ? '達成' : '未達成（遅刻）'}（{todayEntry.punchedAtLocalTime}打刻）
+      </Text>
       <Text style={{ fontSize: 12, color: '#757575' }}>取り消すと「未記録」扱いに戻りますが、本日の再打刻はできません。</Text>
-      <Pressable onPress={handleCancel} style={{ padding: 8, alignSelf: 'flex-start' }}>
+      <Pressable testID="cancel-today-button" onPress={handleCancel} style={{ padding: 8, alignSelf: 'flex-start' }}>
         <Text>取り消す</Text>
       </Pressable>
-      {message ? <Text>{message}</Text> : null}
+      {message ? <Text testID="cancel-today-message">{message}</Text> : null}
     </View>
   );
 }
@@ -185,16 +214,17 @@ export default function SettingsScreen() {
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
         <Text>保護者確認PINを入力してください</Text>
         <TextInput
+          testID="pin-input"
           value={pinInput}
           onChangeText={setPinInput}
           secureTextEntry
           keyboardType="number-pad"
           style={{ borderWidth: 1, padding: 8, width: 120, textAlign: 'center' }}
         />
-        <Pressable onPress={handleUnlock} style={{ padding: 12 }}>
+        <Pressable testID="pin-confirm-button" onPress={handleUnlock} style={{ padding: 12 }}>
           <Text>確認</Text>
         </Pressable>
-        {pinMessage ? <Text>{pinMessage}</Text> : null}
+        {pinMessage ? <Text testID="pin-message">{pinMessage}</Text> : null}
       </View>
     );
   }
