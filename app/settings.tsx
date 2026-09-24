@@ -1,5 +1,6 @@
 import { useCallback, useState, type ChangeEvent } from 'react';
 import { Alert, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useAppStore } from '../store/useAppStore';
 import { verifyPin } from '../store/pin';
@@ -195,6 +196,7 @@ function CancelTodaySection() {
 }
 
 export default function SettingsScreen() {
+  const insets = useSafeAreaInsets();
   const [pinInput, setPinInput] = useState('');
   const [unlocked, setUnlocked] = useState(false);
   const [pinMessage, setPinMessage] = useState('');
@@ -230,7 +232,7 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 4 }}>
+    <ScrollView contentContainerStyle={{ padding: 16, paddingTop: insets.top + 16, gap: 4 }}>
       <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8 }}>曜日ごとの目標起床時刻</Text>
       {ALL_DAYS.map((d) => (
         <ScheduleRow key={d} dayOfWeek={d} />

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { View, Text } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar, type CalendarProps, type DateData } from 'react-native-calendars';
 import { useAppStore } from '../store/useAppStore';
 import { getDayCalendarStatus } from '../store/entries';
@@ -70,6 +71,7 @@ function CalendarDay({ date, marking }: { date?: DateData; marking?: { status?: 
 }
 
 export default function CalendarScreen() {
+  const insets = useSafeAreaInsets();
   const entries = useAppStore((s) => s.entries);
   const schedule = useAppStore((s) => s.schedule);
   const today = getLocalDateKey(new Date());
@@ -90,7 +92,7 @@ export default function CalendarScreen() {
   }, [marked, today]);
 
   return (
-    <View style={{ flex: 1, paddingTop: 12 }}>
+    <View style={{ flex: 1, paddingTop: insets.top + 12 }}>
       <Calendar
         current={`${visibleYear}-${String(visibleMonth).padStart(2, '0')}-01`}
         onMonthChange={(m: DateData) => {
