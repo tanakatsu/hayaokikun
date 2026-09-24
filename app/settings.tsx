@@ -219,7 +219,7 @@ export default function SettingsScreen() {
           onChangeText={setPinInput}
           secureTextEntry
           keyboardType="number-pad"
-          style={{ borderWidth: 1, padding: 8, width: 120, textAlign: 'center' }}
+          style={{ borderWidth: 1, padding: 8, width: 120, textAlign: 'center', color: '#000000' }}
         />
         <Pressable testID="pin-confirm-button" onPress={handleUnlock} style={{ padding: 12 }}>
           <Text>確認</Text>
