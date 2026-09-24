@@ -211,6 +211,12 @@ export default function SettingsScreen() {
     }
   }, [pinInput]);
 
+  const handleLock = useCallback(() => {
+    setUnlocked(false);
+    setPinInput('');
+    setPinMessage('');
+  }, []);
+
   if (!unlocked) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
@@ -233,6 +239,9 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, paddingTop: insets.top + 16, gap: 4 }}>
+      <Pressable testID="lock-button" onPress={handleLock} style={{ alignSelf: 'flex-end', padding: 8, marginBottom: 8 }}>
+        <Text>🔒 ロックする</Text>
+      </Pressable>
       <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8 }}>曜日ごとの目標起床時刻</Text>
       {ALL_DAYS.map((d) => (
         <ScheduleRow key={d} dayOfWeek={d} />

@@ -17,6 +17,25 @@ test.describe('Settings - PIN protection', () => {
     await page.getByTestId('pin-confirm-button').click();
     await expect(page.getByTestId(`schedule-row-${DOW.MON}`)).toBeVisible();
   });
+
+  test('the lock button returns to the PIN screen, requiring re-entry to unlock again', async ({
+    page,
+    freshApp,
+  }) => {
+    await freshApp(at(OFFSET.MON, 9, 0), '/settings');
+
+    await page.getByTestId('pin-input').fill('0000');
+    await page.getByTestId('pin-confirm-button').click();
+    await expect(page.getByTestId(`schedule-row-${DOW.MON}`)).toBeVisible();
+
+    await page.getByTestId('lock-button').click();
+    await expect(page.getByTestId('pin-input')).toBeVisible();
+    await expect(page.getByTestId(`schedule-row-${DOW.MON}`)).toHaveCount(0);
+
+    await page.getByTestId('pin-input').fill('0000');
+    await page.getByTestId('pin-confirm-button').click();
+    await expect(page.getByTestId(`schedule-row-${DOW.MON}`)).toBeVisible();
+  });
 });
 
 test.describe('Settings - same-day target lock', () => {
