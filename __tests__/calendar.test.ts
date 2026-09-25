@@ -41,7 +41,7 @@ describe('buildPunchTimesForMonth', () => {
 
   it('omits cancelled entries and entries outside the month', () => {
     let entries = recordPunchIn(createEmptyEntriesState(), '2026-09-05', 1, '06:50:00', '07:00:00');
-    entries = cancelEntry(entries, '2026-09-05');
+    entries = cancelEntry(entries, '2026-09-05', '2026-09-05');
     entries = recordPunchIn(entries, '2026-10-01', 2, '06:50:00', '07:00:00');
 
     expect(buildPunchTimesForMonth(entries, 2026, 9)).toEqual({});

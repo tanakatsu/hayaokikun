@@ -1,5 +1,6 @@
 import type { DateKey, Entry, EntriesState, EntryStatus, TimeOfDay, WeeklyScheduleState } from './types';
-import { addDaysToDateKey, dateKeyToDayOfWeek } from './dateUtils';
+import { addDaysToDateKey, dateKeyToDayOfWeek, getLocalDateKey, getLocalTimeOfDay, isWithinPunchWindow } from './dateUtils';
+import { PARENT_EDIT_WINDOW_DAYS } from './config';
 import { getEffectiveRule } from './schedule';
 
 export function createEmptyEntriesState(): EntriesState {
@@ -36,14 +37,84 @@ export function recordPunchIn(
 }
 
 export class NoEntryToCancelError extends Error {}
+export class EntryOutOfEditWindowError extends Error {}
+export class NoTargetForDateError extends Error {}
+export class InvalidEditTimeError extends Error {}
 
-export function cancelEntry(state: EntriesState, date: DateKey): EntriesState {
+// The dates a parent may add, edit or cancel: today and the
+// PARENT_EDIT_WINDOW_DAYS days before it. Future dates are never editable.
+export function isWithinParentEditWindow(date: DateKey, today: DateKey): boolean {
+  return date <= today && date >= addDaysToDateKey(today, -PARENT_EDIT_WINDOW_DAYS);
+}
+
+export function cancelEntry(state: EntriesState, date: DateKey, today: DateKey): EntriesState {
+  if (!isWithinParentEditWindow(date, today)) {
+    throw new EntryOutOfEditWindowError(`${date} is outside the parent edit window as of ${today}`);
+  }
   const entry = state.entries[date];
   if (!entry) {
     throw new NoEntryToCancelError(`No entry for ${date} to cancel`);
   }
   if (entry.cancelled) return state; // idempotent
   return { entries: { ...state.entries, [date]: { ...entry, cancelled: true } } };
+}
+
+function dateAndTimeToEpochMs(date: DateKey, time: TimeOfDay): number {
+  const [y, m, d] = date.split('-').map(Number);
+  const [hh, mm, ss] = time.split(':').map(Number);
+  return new Date(y, m - 1, d, hh, mm, ss).getTime();
+}
+
+// Parent-only correction for a forgotten or wrong punch. Three cases:
+//
+//   no entry          -> add      (target = rule in effect that day)
+//   entry, cancelled  -> restore  (cancelled: false, time replaced)
+//   entry             -> edit     (time replaced, target snapshot kept)
+//
+// Edited entries remember the child's own original time exactly once, so
+// a second edit never erases what the child actually punched.
+export function setEntryTimeByParent(
+  state: EntriesState,
+  schedule: WeeklyScheduleState,
+  date: DateKey,
+  time: TimeOfDay,
+  now: Date
+): EntriesState {
+  const today = getLocalDateKey(now);
+  if (!isWithinParentEditWindow(date, today)) {
+    throw new EntryOutOfEditWindowError(`${date} is outside the parent edit window as of ${today}`);
+  }
+  const rule = getEffectiveRule(schedule, dateKeyToDayOfWeek(date), date);
+  if (!rule || !rule.enabled) {
+    throw new NoTargetForDateError(`${date} has no target`);
+  }
+  const normalized: TimeOfDay = `${time.slice(0, 5)}:00`;
+  if (!isWithinPunchWindow(normalized)) {
+    throw new InvalidEditTimeError(`${normalized} is outside the punch window`);
+  }
+  // A time that hasn't happened yet today would settle today's result
+  // before the child is even up (and block their own punch).
+  if (date === today && normalized > getLocalTimeOfDay(now)) {
+    throw new InvalidEditTimeError(`${normalized} is later than now`);
+  }
+
+  const existing = state.entries[date];
+  const targetTimeSnapshot = existing ? existing.targetTimeSnapshot : rule.targetTime;
+  const originalPunchedAtLocalTime =
+    existing?.originalPunchedAtLocalTime ??
+    (existing && !existing.editedByParent ? existing.punchedAtLocalTime : undefined);
+
+  const entry: Entry = {
+    date,
+    punchedAtEpochMs: dateAndTimeToEpochMs(date, normalized),
+    punchedAtLocalTime: normalized,
+    targetTimeSnapshot,
+    status: computeEntryStatus(normalized, targetTimeSnapshot),
+    cancelled: false,
+    editedByParent: true,
+    ...(originalPunchedAtLocalTime ? { originalPunchedAtLocalTime } : {}),
+  };
+  return { entries: { ...state.entries, [date]: entry } };
 }
 
 export function getDayCalendarStatus(

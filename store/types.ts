@@ -24,6 +24,12 @@ export interface Entry {
   targetTimeSnapshot: TimeOfDay; // the target time in effect at punch time, frozen forever
   status: EntryStatus;
   cancelled: boolean; // set by the parent-only cancel flow (T12); always false when recorded
+  // Set by the parent-only correction flow. Absent on entries saved before
+  // that flow existed, and on entries no parent has touched.
+  editedByParent?: boolean;
+  // The child's own punch time, kept the first time a parent edits a
+  // child-punched entry and never overwritten by later edits.
+  originalPunchedAtLocalTime?: TimeOfDay;
 }
 
 export interface EntriesState {

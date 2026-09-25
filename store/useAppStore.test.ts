@@ -166,6 +166,16 @@ describe('useAppStore addScheduleRuleAndPersist', () => {
 });
 
 describe('useAppStore cancelEntryAndPersist', () => {
+  // Cancelling is limited to the last 7 days, so pin "now" to the date these
+  // tests punch on; otherwise they start failing once the real clock moves
+  // more than a week past 2026-09-21.
+  beforeAll(() => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] }).setSystemTime(new Date(2026, 8, 21, 7, 0, 0));
+  });
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
   beforeEach(() => {
     jest.resetAllMocks();
     mockedPersistence.loadEntriesState.mockResolvedValue(createEmptyEntriesState());
@@ -206,5 +216,89 @@ describe('useAppStore cancelEntryAndPersist', () => {
 
     expect(success).toBe(false);
     expect(store.getState().lastError).toBe('no-entry-to-cancel');
+  });
+});
+
+describe('useAppStore setEntryTimeByParentAndPersist', () => {
+  // Friday 2026-09-25 07:00 local; every weekday targets 06:30 by default.
+  beforeAll(() => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] }).setSystemTime(new Date(2026, 8, 25, 7, 0, 0));
+  });
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    mockedPersistence.loadEntriesState.mockResolvedValue(createEmptyEntriesState());
+    mockedPersistence.loadScheduleState.mockResolvedValue(createInitialSchedule('2026-01-01'));
+  });
+
+  it('adds a forgotten day only after the write succeeds', async () => {
+    mockedPersistence.saveEntriesState.mockResolvedValue(undefined);
+    const store = createAppStore();
+    await store.getState().hydrate();
+
+    const success = await store.getState().setEntryTimeByParentAndPersist('2026-09-24', '06:20:00');
+
+    expect(success).toBe(true);
+    expect(store.getState().entries.entries['2026-09-24']).toMatchObject({ status: 'achieved', editedByParent: true });
+    expect(mockedPersistence.saveEntriesState).toHaveBeenCalledTimes(1);
+    expect(store.getState().lastError).toBeNull();
+  });
+
+  it('leaves state untouched when persistence fails', async () => {
+    mockedPersistence.saveEntriesState.mockRejectedValue(new Error('disk full'));
+    const store = createAppStore();
+    await store.getState().hydrate();
+
+    const success = await store.getState().setEntryTimeByParentAndPersist('2026-09-24', '06:20:00');
+
+    expect(success).toBe(false);
+    expect(store.getState().entries.entries['2026-09-24']).toBeUndefined();
+    expect(store.getState().lastError).toBe('save-failed');
+  });
+
+  it.each([
+    ['2026-09-17', '06:20:00', 'out-of-edit-window'],
+    ['2026-09-24', '08:30:00', 'invalid-edit-time'],
+    ['2026-09-25', '07:30:00', 'invalid-edit-time'],
+  ])('rejects %s %s with %s without writing', async (date, time, expected) => {
+    const store = createAppStore();
+    await store.getState().hydrate();
+
+    const success = await store.getState().setEntryTimeByParentAndPersist(date, time);
+
+    expect(success).toBe(false);
+    expect(store.getState().lastError).toBe(expected);
+    expect(mockedPersistence.saveEntriesState).not.toHaveBeenCalled();
+  });
+
+  it('rejects a day with no target', async () => {
+    const schedule = createInitialSchedule('2026-01-01');
+    schedule.rules.push({ dayOfWeek: 4, enabled: false, targetTime: '06:30:00', effectiveFrom: '2026-01-01' });
+    mockedPersistence.loadScheduleState.mockResolvedValue(schedule);
+    const store = createAppStore();
+    await store.getState().hydrate();
+
+    const success = await store.getState().setEntryTimeByParentAndPersist('2026-09-24', '06:20:00');
+
+    expect(success).toBe(false);
+    expect(store.getState().lastError).toBe('no-target-for-date');
+  });
+
+  it('rejects cancelling a record older than the edit window', async () => {
+    const punched = { entries: { '2026-09-10': {
+      date: '2026-09-10', punchedAtEpochMs: 1, punchedAtLocalTime: '06:20:00',
+      targetTimeSnapshot: '06:30:00', status: 'achieved' as const, cancelled: false,
+    } } };
+    mockedPersistence.loadEntriesState.mockResolvedValue(punched);
+    const store = createAppStore();
+    await store.getState().hydrate();
+
+    const success = await store.getState().cancelEntryAndPersist('2026-09-10');
+
+    expect(success).toBe(false);
+    expect(store.getState().lastError).toBe('out-of-edit-window');
   });
 });
