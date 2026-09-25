@@ -1,6 +1,6 @@
 import { useCallback, useState, type ChangeEvent } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
 import type { TimeOfDay } from '../store/types';
 
 // Lives outside app/ on purpose: expo-router turns every file under app/
@@ -33,26 +33,23 @@ export function TimeOfDayField({
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const handleTimeChange = useCallback(
-    (event: DateTimePickerEvent, selected?: Date) => {
-      // Android's "default" display is a modal dialog: onChange fires exactly
-      // once, on confirm ('set') or cancel ('dismissed'), so it's safe to close
-      // right away. iOS's "default" display is an inline spinner with no
-      // confirm gesture of its own: onChange fires on every tick while
-      // scrolling, so closing here would dismiss it before the user finishes
-      // (the picker is instead closed by the iOS-only "完了" button below).
+  const handleValueChange = useCallback(
+    (_event: DateTimePickerChangeEvent, selected: Date) => {
+      // Android's "default" display is a modal dialog: onValueChange fires
+      // exactly once, on confirm, so it's safe to close right away. iOS's
+      // "default" display is an inline spinner with no confirm gesture of its
+      // own: onValueChange fires on every tick while scrolling, so closing
+      // here would dismiss it before the user finishes (the picker is instead
+      // closed by the iOS-only "完了" button below).
       if (Platform.OS === 'android') {
         setPickerOpen(false);
       }
-      if (event.type === 'dismissed') {
-        setPickerOpen(false);
-        return;
-      }
-      if (!selected) return;
       onChange(dateToTimeOfDay(selected));
     },
     [onChange]
   );
+
+  const handleDismiss = useCallback(() => setPickerOpen(false), []);
 
   const handleWebTimeChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
@@ -83,7 +80,13 @@ export function TimeOfDayField({
       </Pressable>
       {pickerOpen ? (
         <>
-          <DateTimePicker value={timeOfDayToDate(value)} mode="time" is24Hour onChange={handleTimeChange} />
+          <DateTimePicker
+            value={timeOfDayToDate(value)}
+            mode="time"
+            is24Hour
+            onValueChange={handleValueChange}
+            onDismiss={handleDismiss}
+          />
           {Platform.OS === 'ios' ? (
             <Pressable onPress={() => setPickerOpen(false)} style={{ padding: 8 }}>
               <Text>完了</Text>
