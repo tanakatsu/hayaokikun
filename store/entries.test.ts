@@ -1,7 +1,12 @@
 import { addScheduleRule, createInitialSchedule } from './schedule';
 import {
   DuplicatePunchError,
+  EntryOutOfEditWindowError,
+  InvalidEditTimeError,
   NoEntryToCancelError,
+  NoTargetForDateError,
+  isWithinParentEditWindow,
+  setEntryTimeByParent,
   cancelEntry,
   computeAchievementStreak,
   computeEntryStatus,
@@ -185,7 +190,7 @@ describe('computeAchievementStreak', () => {
     entries = punch(entries, '2024-01-01', '06:50:00');
     entries = punch(entries, '2024-01-02', '06:50:00');
     entries = punch(entries, '2024-01-03', '06:50:00');
-    entries = cancelEntry(entries, '2024-01-02'); // cancel the middle day of what would be a 3-day streak
+    entries = cancelEntry(entries, '2024-01-02', '2024-01-03'); // cancel the middle day of what would be a 3-day streak
 
     expect(computeAchievementStreak(entries, schedule, '2024-01-03')).toBe(1);
   });
@@ -213,7 +218,7 @@ describe('isScheduleEditLockedForDate', () => {
 describe('cancelEntry', () => {
   it('marks the entry cancelled while preserving the original punch fields', () => {
     const entries = recordPunchIn(createEmptyEntriesState(), '2026-09-21', 1000, '06:50:00', '07:00:00');
-    const next = cancelEntry(entries, '2026-09-21');
+    const next = cancelEntry(entries, '2026-09-21', '2026-09-21');
     expect(next.entries['2026-09-21']).toEqual({
       date: '2026-09-21',
       punchedAtEpochMs: 1000,
@@ -226,17 +231,17 @@ describe('cancelEntry', () => {
 
   it('does not mutate the input state', () => {
     const entries = recordPunchIn(createEmptyEntriesState(), '2026-09-21', 1000, '06:50:00', '07:00:00');
-    cancelEntry(entries, '2026-09-21');
+    cancelEntry(entries, '2026-09-21', '2026-09-21');
     expect(entries.entries['2026-09-21'].cancelled).toBe(false);
   });
 
   it('throws when there is no entry to cancel', () => {
-    expect(() => cancelEntry(createEmptyEntriesState(), '2026-09-21')).toThrow(NoEntryToCancelError);
+    expect(() => cancelEntry(createEmptyEntriesState(), '2026-09-21', '2026-09-21')).toThrow(NoEntryToCancelError);
   });
 
   it('does not block a subsequent punch on that date (repunch is still refused by design)', () => {
     let entries = recordPunchIn(createEmptyEntriesState(), '2026-09-21', 1000, '06:50:00', '07:00:00');
-    entries = cancelEntry(entries, '2026-09-21');
+    entries = cancelEntry(entries, '2026-09-21', '2026-09-21');
     expect(() => recordPunchIn(entries, '2026-09-21', 2000, '06:55:00', '07:00:00')).toThrow(
       DuplicatePunchError
     );
@@ -265,5 +270,148 @@ describe('computePointsBalance', () => {
 
   it('never goes negative', () => {
     expect(computePointsBalance(createEmptyEntriesState(), createInitialSchedule('2026-01-01'))).toBe(0);
+  });
+});
+
+describe('cancelEntry edit window', () => {
+  it('throws for a date older than the parent edit window', () => {
+    const entries = recordPunchIn(createEmptyEntriesState(), '2026-09-17', 1, '06:50:00', '07:00:00');
+    expect(() => cancelEntry(entries, '2026-09-17', '2026-09-25')).toThrow(EntryOutOfEditWindowError);
+  });
+
+  it('allows the oldest date inside the window', () => {
+    const entries = recordPunchIn(createEmptyEntriesState(), '2026-09-18', 1, '06:50:00', '07:00:00');
+    expect(cancelEntry(entries, '2026-09-18', '2026-09-25').entries['2026-09-18'].cancelled).toBe(true);
+  });
+});
+
+describe('isWithinParentEditWindow', () => {
+  it('includes today and exactly 7 days ago', () => {
+    expect(isWithinParentEditWindow('2026-09-25', '2026-09-25')).toBe(true);
+    expect(isWithinParentEditWindow('2026-09-18', '2026-09-25')).toBe(true);
+  });
+
+  it('excludes 8 days ago and any future date', () => {
+    expect(isWithinParentEditWindow('2026-09-17', '2026-09-25')).toBe(false);
+    expect(isWithinParentEditWindow('2026-09-26', '2026-09-25')).toBe(false);
+  });
+
+  it('works across a month boundary', () => {
+    expect(isWithinParentEditWindow('2026-09-28', '2026-10-02')).toBe(true);
+  });
+});
+
+describe('setEntryTimeByParent', () => {
+  // Friday 2026-09-25 07:00:00 local. Every weekday targets 06:30 (defaults).
+  const NOW = new Date(2026, 8, 25, 7, 0, 0);
+  const schedule = createInitialSchedule('2026-01-01');
+
+  it('adds a missing entry using the target in effect that day', () => {
+    const next = setEntryTimeByParent(createEmptyEntriesState(), schedule, '2026-09-24', '06:20', NOW);
+    expect(next.entries['2026-09-24']).toEqual({
+      date: '2026-09-24',
+      punchedAtEpochMs: new Date(2026, 8, 24, 6, 20, 0).getTime(),
+      punchedAtLocalTime: '06:20:00',
+      targetTimeSnapshot: '06:30:00',
+      status: 'achieved',
+      cancelled: false,
+      editedByParent: true,
+    });
+  });
+
+  it('marks an entry achieved at exactly the target and late one minute after', () => {
+    const at = setEntryTimeByParent(createEmptyEntriesState(), schedule, '2026-09-24', '06:30:00', NOW);
+    const after = setEntryTimeByParent(createEmptyEntriesState(), schedule, '2026-09-24', '06:31:00', NOW);
+    expect(at.entries['2026-09-24'].status).toBe('achieved');
+    expect(after.entries['2026-09-24'].status).toBe('late');
+  });
+
+  it('edits a child punch, keeping its target snapshot and original time', () => {
+    const punched = recordPunchIn(createEmptyEntriesState(), '2026-09-24', 1, '06:42:15', '06:40:00');
+    const next = setEntryTimeByParent(punched, schedule, '2026-09-24', '06:35:00', NOW);
+    expect(next.entries['2026-09-24']).toMatchObject({
+      punchedAtLocalTime: '06:35:00',
+      targetTimeSnapshot: '06:40:00',
+      status: 'achieved',
+      editedByParent: true,
+      originalPunchedAtLocalTime: '06:42:15',
+    });
+  });
+
+  it('never overwrites the original time on a second edit', () => {
+    const punched = recordPunchIn(createEmptyEntriesState(), '2026-09-24', 1, '06:42:15', '06:30:00');
+    const once = setEntryTimeByParent(punched, schedule, '2026-09-24', '06:35:00', NOW);
+    const twice = setEntryTimeByParent(once, schedule, '2026-09-24', '06:10:00', NOW);
+    expect(twice.entries['2026-09-24'].originalPunchedAtLocalTime).toBe('06:42:15');
+    expect(twice.entries['2026-09-24'].punchedAtLocalTime).toBe('06:10:00');
+  });
+
+  it('does not invent an original time when editing a parent-added entry', () => {
+    const added = setEntryTimeByParent(createEmptyEntriesState(), schedule, '2026-09-24', '06:20:00', NOW);
+    const edited = setEntryTimeByParent(added, schedule, '2026-09-24', '06:25:00', NOW);
+    expect(edited.entries['2026-09-24'].originalPunchedAtLocalTime).toBeUndefined();
+  });
+
+  it('restores a cancelled entry', () => {
+    const punched = recordPunchIn(createEmptyEntriesState(), '2026-09-24', 1, '06:20:00', '06:30:00');
+    const cancelled = cancelEntry(punched, '2026-09-24', '2026-09-25');
+    const restored = setEntryTimeByParent(cancelled, schedule, '2026-09-24', '06:20:00', NOW);
+    expect(restored.entries['2026-09-24'].cancelled).toBe(false);
+    expect(getDayCalendarStatus(restored, schedule, '2026-09-24')).toBe('achieved');
+  });
+
+  it('rejects dates outside the edit window', () => {
+    const empty = createEmptyEntriesState();
+    expect(() => setEntryTimeByParent(empty, schedule, '2026-09-17', '06:20:00', NOW)).toThrow(EntryOutOfEditWindowError);
+    expect(() => setEntryTimeByParent(empty, schedule, '2026-09-26', '06:20:00', NOW)).toThrow(EntryOutOfEditWindowError);
+  });
+
+  it('rejects a day whose rule is OFF', () => {
+    const offThursday = addScheduleRule(schedule, {
+      dayOfWeek: 4,
+      enabled: false,
+      targetTime: '06:30:00',
+      effectiveFrom: '2026-01-01',
+    });
+    expect(() =>
+      setEntryTimeByParent(createEmptyEntriesState(), offThursday, '2026-09-24', '06:20:00', NOW)
+    ).toThrow(NoTargetForDateError);
+  });
+
+  it('rejects times outside the punch window', () => {
+    const empty = createEmptyEntriesState();
+    expect(() => setEntryTimeByParent(empty, schedule, '2026-09-24', '04:59:00', NOW)).toThrow(InvalidEditTimeError);
+    expect(() => setEntryTimeByParent(empty, schedule, '2026-09-24', '08:01:00', NOW)).toThrow(InvalidEditTimeError);
+  });
+
+  it('rejects a time later than now for today, but accepts now itself', () => {
+    const empty = createEmptyEntriesState();
+    expect(() => setEntryTimeByParent(empty, schedule, '2026-09-25', '07:01:00', NOW)).toThrow(InvalidEditTimeError);
+    expect(setEntryTimeByParent(empty, schedule, '2026-09-25', '07:00:00', NOW).entries['2026-09-25'].status).toBe('late');
+  });
+
+  it('does not mutate the input state', () => {
+    const empty = createEmptyEntriesState();
+    setEntryTimeByParent(empty, schedule, '2026-09-24', '06:20:00', NOW);
+    expect(empty.entries['2026-09-24']).toBeUndefined();
+  });
+});
+
+describe('entries saved before parent correction existed', () => {
+  it('read and classify exactly as before', () => {
+    const legacy = {
+      entries: {
+        '2026-09-24': {
+          date: '2026-09-24',
+          punchedAtEpochMs: 1,
+          punchedAtLocalTime: '06:20:00',
+          targetTimeSnapshot: '06:30:00',
+          status: 'achieved' as const,
+          cancelled: false,
+        },
+      },
+    };
+    expect(getDayCalendarStatus(legacy, createInitialSchedule('2026-01-01'), '2026-09-24')).toBe('achieved');
+    expect(legacy.entries['2026-09-24']).not.toHaveProperty('editedByParent');
   });
 });

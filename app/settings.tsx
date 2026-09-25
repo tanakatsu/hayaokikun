@@ -1,28 +1,39 @@
-import { useCallback, useState, type ChangeEvent } from 'react';
+import { useCallback, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useAppStore } from '../store/useAppStore';
 import { verifyPin } from '../store/pin';
-import { getLocalDateKey } from '../store/dateUtils';
-import { getDayCalendarStatus, isScheduleEditLockedForDate } from '../store/entries';
-import { MAX_TARGET_TIME, MIN_TARGET_TIME } from '../store/config';
+import { addDaysToDateKey, dateKeyToDayOfWeek, getLocalDateKey } from '../store/dateUtils';
+import { computeEntryStatus, getDayCalendarStatus, isScheduleEditLockedForDate } from '../store/entries';
+import { MAX_TARGET_TIME, MIN_TARGET_TIME, PARENT_EDIT_WINDOW_DAYS } from '../store/config';
 import { DEFAULT_TARGET_TIME, getEffectiveRule, isValidTargetTime } from '../store/schedule';
-import type { DayOfWeek, TimeOfDay } from '../store/types';
+import type { DateKey, DayOfWeek, TimeOfDay } from '../store/types';
+import { TimeOfDayField } from '../components/TimeOfDayField';
 
 const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 const ALL_DAYS: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
 
-function timeOfDayToDate(time: TimeOfDay): Date {
-  const [h, m, s] = time.split(':').map(Number);
-  const d = new Date();
-  d.setHours(h, m, s, 0);
-  return d;
+// react-native-web's Alert.alert is a no-op, so the web build (used for
+// local preview and for the Playwright e2e suite) needs browser-native
+// fallbacks for both the confirm prompt and the plain notice.
+function confirmThen(title: string, message: string, confirmLabel: string, onConfirm: () => void) {
+  if (Platform.OS === 'web') {
+    if (window.confirm(`${title}\n${message}`)) onConfirm();
+    return;
+  }
+  Alert.alert(title, message, [
+    { text: 'キャンセル', style: 'cancel' },
+    { text: confirmLabel, style: 'destructive', onPress: onConfirm },
+  ]);
 }
 
-function dateToTimeOfDay(d: Date): TimeOfDay {
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+function formatDateLabel(date: DateKey): string {
+  const [, m, d] = date.split('-').map(Number);
+  return `${m}/${d}（${WEEKDAY_LABELS[dateKeyToDayOfWeek(date)]}）`;
+}
+
+function formatTime(time: TimeOfDay): string {
+  return time.slice(0, 5);
 }
 
 function ScheduleRow({ dayOfWeek }: { dayOfWeek: DayOfWeek }) {
@@ -35,38 +46,14 @@ function ScheduleRow({ dayOfWeek }: { dayOfWeek: DayOfWeek }) {
   const effectiveRule = getEffectiveRule(schedule, dayOfWeek, today);
   const [enabled, setEnabled] = useState(effectiveRule?.enabled ?? true);
   const [targetTime, setTargetTime] = useState<TimeOfDay>(effectiveRule?.targetTime ?? DEFAULT_TARGET_TIME);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [message, setMessage] = useState('');
 
   const isTodayRow = dayOfWeek === todayDayOfWeek;
   const locked = isTodayRow && isScheduleEditLockedForDate(entries, today);
 
-  const handleTimeChange = useCallback((event: DateTimePickerEvent, selected?: Date) => {
-    // Android's "default" display is a modal dialog: onChange fires exactly
-    // once, on confirm ('set') or cancel ('dismissed'), so it's safe to close
-    // right away. iOS's "default" display is an inline spinner with no
-    // confirm gesture of its own: onChange fires on every tick while
-    // scrolling, so closing here would dismiss it before the user finishes
-    // (the picker is instead closed by the iOS-only "完了" button below).
-    if (Platform.OS === 'android') {
-      setPickerOpen(false);
-    }
-    if (event.type === 'dismissed') {
-      setPickerOpen(false);
-      return;
-    }
-    if (!selected) return;
-    setTargetTime(dateToTimeOfDay(selected));
-  }, []);
-
-  const handleWebTimeChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.value) return;
-    setTargetTime(`${e.target.value}:00`);
-  }, []);
-
   const handleSave = useCallback(async () => {
     if (enabled && !isValidTargetTime(targetTime)) {
-      setMessage(`目標時刻は${MIN_TARGET_TIME.slice(0, 5)}〜${MAX_TARGET_TIME.slice(0, 5)}の範囲で入力してください`);
+      setMessage(`目標時刻は${formatTime(MIN_TARGET_TIME)}〜${formatTime(MAX_TARGET_TIME)}の範囲で入力してください`);
       return;
     }
     const success = await addScheduleRuleAndPersist({
@@ -91,21 +78,12 @@ function ScheduleRow({ dayOfWeek }: { dayOfWeek: DayOfWeek }) {
         disabled={locked}
       />
       {enabled ? (
-        Platform.OS === 'web' ? (
-          // @react-native-community/datetimepicker has no web implementation
-          // (it renders null there), so the browser's own time input is used.
-          <input
-            type="time"
-            data-testid={`schedule-time-${dayOfWeek}`}
-            value={targetTime.slice(0, 5)}
-            disabled={locked}
-            onChange={handleWebTimeChange}
-          />
-        ) : (
-          <Pressable onPress={() => !locked && setPickerOpen(true)} disabled={locked}>
-            <Text>{targetTime.slice(0, 5)}</Text>
-          </Pressable>
-        )
+        <TimeOfDayField
+          testID={`schedule-time-${dayOfWeek}`}
+          value={targetTime}
+          onChange={setTargetTime}
+          disabled={locked}
+        />
       ) : (
         <Text style={{ color: '#9E9E9E' }}>－</Text>
       )}
@@ -113,84 +91,131 @@ function ScheduleRow({ dayOfWeek }: { dayOfWeek: DayOfWeek }) {
         <Text>保存</Text>
       </Pressable>
       {message ? <Text testID={`schedule-message-${dayOfWeek}`} style={{ fontSize: 12 }}>{message}</Text> : null}
-      {pickerOpen ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <DateTimePicker value={timeOfDayToDate(targetTime)} mode="time" is24Hour onChange={handleTimeChange} />
-          {Platform.OS === 'ios' ? (
-            <Pressable onPress={() => setPickerOpen(false)} style={{ padding: 8 }}>
-              <Text>完了</Text>
+    </View>
+  );
+}
+
+const ENTRY_ERROR_MESSAGES: Record<string, string> = {
+  'save-failed': '保存に失敗しました。もう一度お試しください',
+  'out-of-edit-window': `修正できるのは今日から${PARENT_EDIT_WINDOW_DAYS}日前までです`,
+  'no-target-for-date': 'この日は目標が設定されていません',
+  'invalid-edit-time': `${formatTime(MIN_TARGET_TIME)}〜${formatTime(MAX_TARGET_TIME)}の範囲で、現在より前の時刻を入力してください`,
+  'no-entry-to-cancel': '取り消す記録がありません',
+};
+
+// One day in the parent correction list. Row states:
+//
+//   no target (OFF day)   -> read-only
+//   no record             -> [追加]
+//   cancelled             -> [追加]        (re-entering a time restores it)
+//   recorded              -> [時刻を変更] [取り消す]
+function RecentEntryRow({ date }: { date: DateKey }) {
+  const entries = useAppStore((s) => s.entries);
+  const schedule = useAppStore((s) => s.schedule);
+  const setEntryTimeByParentAndPersist = useAppStore((s) => s.setEntryTimeByParentAndPersist);
+  const cancelEntryAndPersist = useAppStore((s) => s.cancelEntryAndPersist);
+
+  const entry = entries.entries[date];
+  const rule = getEffectiveRule(schedule, dateKeyToDayOfWeek(date), date);
+  const status = getDayCalendarStatus(entries, schedule, date);
+  const active = Boolean(entry && !entry.cancelled);
+  const [draftTime, setDraftTime] = useState<TimeOfDay>(entry?.punchedAtLocalTime ?? rule?.targetTime ?? DEFAULT_TARGET_TIME);
+  const [message, setMessage] = useState('');
+
+  const reportResult = useCallback((success: boolean, doneMessage: string) => {
+    if (success) {
+      setMessage(doneMessage);
+    } else {
+      const lastError = useAppStore.getState().lastError;
+      setMessage((lastError && ENTRY_ERROR_MESSAGES[lastError]) ?? '保存に失敗しました');
+    }
+  }, []);
+
+  const handleSave = useCallback(() => {
+    const target = entry ? entry.targetTimeSnapshot : rule?.targetTime ?? DEFAULT_TARGET_TIME;
+    const outcome = computeEntryStatus(draftTime, target) === 'achieved' ? '達成' : '未達成（遅刻）';
+    confirmThen(
+      `${formatDateLabel(date)}を${formatTime(draftTime)}で記録しますか？`,
+      `判定: ${outcome}`,
+      '記録する',
+      async () => {
+        reportResult(await setEntryTimeByParentAndPersist(date, draftTime), '記録しました');
+      }
+    );
+  }, [date, draftTime, entry, rule, reportResult, setEntryTimeByParentAndPersist]);
+
+  const handleCancel = useCallback(() => {
+    confirmThen(
+      `${formatDateLabel(date)}の記録を取り消しますか？`,
+      '取り消すと「未記録」扱いに戻ります。時刻を入れ直せば元に戻せます。',
+      '取り消す',
+      async () => {
+        reportResult(await cancelEntryAndPersist(date), '取り消しました');
+      }
+    );
+  }, [date, reportResult, cancelEntryAndPersist]);
+
+  let statusLabel: string;
+  if (status === 'no-target') statusLabel = '目標なし';
+  else if (entry?.cancelled) statusLabel = '取り消し済み';
+  else if (status === 'achieved') statusLabel = `達成 ${formatTime(entry!.punchedAtLocalTime)}`;
+  else if (status === 'late') statusLabel = `未達成（遅刻） ${formatTime(entry!.punchedAtLocalTime)}`;
+  else statusLabel = '未記録';
+
+  let editNote = '';
+  if (active && entry?.editedByParent) {
+    editNote = entry.originalPunchedAtLocalTime
+      ? `親が修正（元 ${formatTime(entry.originalPunchedAtLocalTime)}）`
+      : '親が追加';
+  }
+
+  return (
+    <View testID={`recent-row-${date}`} style={{ paddingVertical: 8, gap: 4 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <Text style={{ width: 72 }}>{formatDateLabel(date)}</Text>
+        <Text testID={`recent-status-${date}`}>{statusLabel}</Text>
+        {editNote ? (
+          <Text testID={`recent-note-${date}`} style={{ fontSize: 12, color: '#757575' }}>
+            {editNote}
+          </Text>
+        ) : null}
+      </View>
+      {status !== 'no-target' ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap', paddingLeft: 84 }}>
+          <TimeOfDayField testID={`recent-time-${date}`} value={draftTime} onChange={setDraftTime} />
+          <Pressable testID={`recent-save-${date}`} onPress={handleSave} style={{ padding: 8 }}>
+            <Text>{active ? '時刻を変更' : '追加'}</Text>
+          </Pressable>
+          {active ? (
+            <Pressable testID={`recent-cancel-${date}`} onPress={handleCancel} style={{ padding: 8 }}>
+              <Text>取り消す</Text>
             </Pressable>
           ) : null}
         </View>
+      ) : null}
+      {message ? (
+        <Text testID={`recent-message-${date}`} style={{ fontSize: 12, paddingLeft: 84 }}>
+          {message}
+        </Text>
       ) : null}
     </View>
   );
 }
 
-function CancelTodaySection() {
-  const entries = useAppStore((s) => s.entries);
-  const schedule = useAppStore((s) => s.schedule);
-  const cancelEntryAndPersist = useAppStore((s) => s.cancelEntryAndPersist);
+function RecentEntriesSection() {
   const today = getLocalDateKey(new Date());
-  const [message, setMessage] = useState('');
-
-  // Hooks must run unconditionally on every render, so these callbacks are
-  // declared before the early-return guard below (e.g. cancelling flips
-  // todayEntry.cancelled to true on this same mounted instance, which must
-  // not change the number of hooks called).
-  const performCancel = useCallback(async () => {
-    const success = await cancelEntryAndPersist(today);
-    if (success) {
-      // The success message can't rely on local `message` state: the moment
-      // cancellation succeeds, todayEntry.cancelled flips to true on the
-      // next render, and the component's own guard below unmounts this
-      // whole section (message included) before anyone could see it.
-      // react-native-web's Alert.alert is a no-op, so the web build (used
-      // for local preview and for the Playwright e2e suite) needs its own
-      // browser-native fallback.
-      if (Platform.OS === 'web') {
-        window.alert('取り消しました\n本日の記録を取り消しました');
-      } else {
-        Alert.alert('取り消しました', '本日の記録を取り消しました');
-      }
-    } else {
-      setMessage('取り消しに失敗しました');
-    }
-  }, [cancelEntryAndPersist, today]);
-
-  const handleCancel = useCallback(() => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('本日の記録を取り消しますか？\n取り消すと「未記録」扱いに戻ります。本日の再打刻はできません。この操作は元に戻せません。')) {
-        performCancel();
-      }
-      return;
-    }
-    Alert.alert(
-      '本日の記録を取り消しますか？',
-      '取り消すと「未記録」扱いに戻ります。本日の再打刻はできません。この操作は元に戻せません。',
-      [
-        { text: 'キャンセル', style: 'cancel' },
-        { text: '取り消す', style: 'destructive', onPress: performCancel },
-      ]
-    );
-  }, [performCancel]);
-
-  const todayEntry = entries.entries[today];
-  if (!todayEntry || todayEntry.cancelled) return null; // nothing recorded (or already cancelled) — nothing to show
-
-  const status = getDayCalendarStatus(entries, schedule, today);
+  const dates: DateKey[] = [];
+  for (let i = 0; i <= PARENT_EDIT_WINDOW_DAYS; i++) dates.push(addDaysToDateKey(today, -i));
 
   return (
-    <View style={{ marginTop: 24, gap: 8 }}>
-      <Text style={{ fontSize: 16, fontWeight: '600' }}>本日の記録の取り消し</Text>
-      <Text testID="cancel-today-status">
-        現在の記録: {status === 'achieved' ? '達成' : '未達成（遅刻）'}（{todayEntry.punchedAtLocalTime}打刻）
+    <View style={{ marginTop: 24, gap: 4 }}>
+      <Text style={{ fontSize: 16, fontWeight: '600' }}>直近の記録の修正</Text>
+      <Text style={{ fontSize: 12, color: '#757575' }}>
+        打刻し忘れた日の追加、時刻の変更、取り消しができます（今日から{PARENT_EDIT_WINDOW_DAYS}日前まで）。
       </Text>
-      <Text style={{ fontSize: 12, color: '#757575' }}>取り消すと「未記録」扱いに戻りますが、本日の再打刻はできません。</Text>
-      <Pressable testID="cancel-today-button" onPress={handleCancel} style={{ padding: 8, alignSelf: 'flex-start' }}>
-        <Text>取り消す</Text>
-      </Pressable>
-      {message ? <Text testID="cancel-today-message">{message}</Text> : null}
+      {dates.map((date) => (
+        <RecentEntryRow key={date} date={date} />
+      ))}
     </View>
   );
 }
@@ -246,7 +271,7 @@ export default function SettingsScreen() {
       {ALL_DAYS.map((d) => (
         <ScheduleRow key={d} dayOfWeek={d} />
       ))}
-      <CancelTodaySection />
+      <RecentEntriesSection />
     </ScrollView>
   );
 }

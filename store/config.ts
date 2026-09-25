@@ -10,3 +10,7 @@ export const DEFAULT_TARGET_TIME: TimeOfDay = '06:30:00';
 
 // PIN that unlocks the parent-only settings screen until one is set.
 export const DEFAULT_PARENT_PIN = '0000';
+
+// How many days back (in addition to today) a parent may add, edit or
+// cancel a record from Settings.
+export const PARENT_EDIT_WINDOW_DAYS = 7;
