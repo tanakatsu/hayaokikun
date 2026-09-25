@@ -18,8 +18,9 @@ test('the calendar distinguishes all four day states', async ({ page, freshApp, 
   await expect(page.getByTestId(`schedule-message-${DOW.THU}`)).toHaveText('保存しました');
 
   await page.goto('/calendar');
-  await expect(page.getByTestId(calendarDayTestId(OFFSET.MON))).toHaveAttribute('aria-label', '達成');
-  await expect(page.getByTestId(calendarDayTestId(OFFSET.TUE))).toHaveAttribute('aria-label', '未達成（遅刻）');
+  await expect(page.getByTestId(calendarDayTestId(OFFSET.MON))).toHaveAttribute('aria-label', '達成 6:00');
+  await expect(page.getByTestId(calendarDayTestId(OFFSET.MON))).toContainText('6:00');
+  await expect(page.getByTestId(calendarDayTestId(OFFSET.TUE))).toHaveAttribute('aria-label', '未達成（遅刻） 7:00');
   await expect(page.getByTestId(calendarDayTestId(OFFSET.WED))).toHaveAttribute('aria-label', '未記録');
   await expect(page.getByTestId(calendarDayTestId(OFFSET.THU))).toHaveAttribute('aria-label', '目標なし');
 });

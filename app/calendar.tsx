@@ -9,16 +9,17 @@ import type { DateKey, EntriesState, WeeklyScheduleState } from '../store/types'
 
 type DayStatus = 'achieved' | 'late' | 'no-record' | 'no-target';
 
-const STATUS_STYLE: Record<DayStatus, { bg: string; fg: string; glyph: string; border: 'solid' | 'dashed' | 'dotted' | 'none' }> = {
-  achieved: { bg: '#C8E6C9', fg: '#1B5E20', glyph: '✓', border: 'solid' },
-  late: { bg: '#FFE0B2', fg: '#E65100', glyph: '△', border: 'dashed' },
-  'no-record': { bg: '#F5F5F5', fg: '#757575', glyph: '・', border: 'dotted' },
-  'no-target': { bg: '#E0E0E0', fg: '#9E9E9E', glyph: '', border: 'none' },
+// Border style differs per status so days stay distinguishable without
+// relying on color alone.
+const STATUS_STYLE: Record<DayStatus, { bg: string; fg: string; border: 'solid' | 'dashed' | 'dotted' | 'none' }> = {
+  achieved: { bg: '#C8E6C9', fg: '#1B5E20', border: 'solid' },
+  late: { bg: '#FFE0B2', fg: '#E65100', border: 'dashed' },
+  'no-record': { bg: '#F5F5F5', fg: '#757575', border: 'dotted' },
+  'no-target': { bg: '#E0E0E0', fg: '#9E9E9E', border: 'none' },
 };
 
-// Exposed via accessibilityLabel (not just the glyph) so both screen readers
-// and tests can identify a day's status unambiguously — 'no-target' has no
-// glyph of its own, and 'achieved'/'late' glyphs alone aren't self-describing.
+// Exposed via accessibilityLabel so both screen readers and tests can
+// identify a day's status unambiguously without relying on color.
 export const STATUS_LABEL: Record<DayStatus, string> = {
   achieved: '達成',
   late: '未達成（遅刻）',
@@ -41,19 +42,37 @@ export function buildMarkedStatusesForMonth(
   return marked;
 }
 
+// Non-cancelled punch times for the given month as "H:MM" (seconds dropped,
+// no leading zero on the hour) to fit inside a calendar cell.
+export function buildPunchTimesForMonth(
+  entries: EntriesState,
+  year: number,
+  month: number // 1-12
+): Record<DateKey, string> {
+  const prefix = `${year}-${String(month).padStart(2, '0')}-`;
+  const times: Record<DateKey, string> = {};
+  for (const [dateKey, entry] of Object.entries(entries.entries)) {
+    if (!dateKey.startsWith(prefix) || entry.cancelled) continue;
+    const [hh, mm] = entry.punchedAtLocalTime.split(':');
+    times[dateKey] = `${Number(hh)}:${mm}`;
+  }
+  return times;
+}
+
 const TODAY_COLOR = '#1976D2';
 
-function CalendarDay({ date, marking }: { date?: DateData; marking?: { status?: DayStatus; isToday?: boolean } }) {
+function CalendarDay({ date, marking }: { date?: DateData; marking?: { status?: DayStatus; isToday?: boolean; punchTime?: string } }) {
   if (!date) return null;
   const status = marking?.status ?? 'no-target';
   const style = STATUS_STYLE[status];
   const isToday = marking?.isToday ?? false;
+  const punchTime = marking?.punchTime;
   return (
     <View
       testID={`calendar-day-${date.dateString}`}
-      accessibilityLabel={STATUS_LABEL[status]}
+      accessibilityLabel={punchTime ? `${STATUS_LABEL[status]} ${punchTime}` : STATUS_LABEL[status]}
       style={{
-        width: 34,
+        width: 44,
         height: 42,
         alignItems: 'center',
         justifyContent: 'center',
@@ -65,7 +84,27 @@ function CalendarDay({ date, marking }: { date?: DateData; marking?: { status?: 
       }}
     >
       <Text style={{ color: style.fg, fontWeight: isToday ? '800' : '600' }}>{date.day}</Text>
-      <Text style={{ color: style.fg, fontSize: 10, lineHeight: 12 }}>{style.glyph}</Text>
+      <Text style={{ color: style.fg, fontSize: 10, lineHeight: 12 }}>{punchTime ?? ''}</Text>
+    </View>
+  );
+}
+
+function LegendItem({ status, label }: { status: DayStatus; label: string }) {
+  const style = STATUS_STYLE[status];
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+      <View
+        style={{
+          width: 14,
+          height: 14,
+          borderRadius: 3,
+          backgroundColor: style.bg,
+          borderWidth: style.border === 'none' ? 0 : 1.5,
+          borderStyle: style.border === 'none' ? 'solid' : style.border,
+          borderColor: style.fg,
+        }}
+      />
+      <Text>{label}</Text>
     </View>
   );
 }
@@ -83,13 +122,18 @@ export default function CalendarScreen() {
     [entries, schedule, visibleYear, visibleMonth]
   );
 
+  const punchTimes = useMemo(
+    () => buildPunchTimesForMonth(entries, visibleYear, visibleMonth),
+    [entries, visibleYear, visibleMonth]
+  );
+
   const markedDates = useMemo(() => {
-    const result: Record<string, { status: DayStatus; isToday: boolean }> = {};
+    const result: Record<string, { status: DayStatus; isToday: boolean; punchTime?: string }> = {};
     for (const [dateKey, status] of Object.entries(marked)) {
-      result[dateKey] = { status, isToday: dateKey === today };
+      result[dateKey] = { status, isToday: dateKey === today, punchTime: punchTimes[dateKey] };
     }
     return result;
-  }, [marked, today]);
+  }, [marked, punchTimes, today]);
 
   return (
     <View style={{ flex: 1, paddingTop: insets.top + 12 }}>
@@ -114,11 +158,14 @@ export default function CalendarScreen() {
         dayComponent={CalendarDay as CalendarProps['dayComponent']}
       />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, padding: 16, justifyContent: 'center' }}>
-        <Text>✓ 達成</Text>
-        <Text>△ 未達成</Text>
-        <Text>・ 未記録</Text>
-        <Text style={{ color: '#9E9E9E' }}>（空欄）目標なし</Text>
-        <Text style={{ color: TODAY_COLOR, fontWeight: '700' }}>枠線＝今日</Text>
+        <LegendItem status="achieved" label="達成" />
+        <LegendItem status="late" label="未達成" />
+        <LegendItem status="no-record" label="未記録" />
+        <LegendItem status="no-target" label="目標なし" />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <View style={{ width: 14, height: 14, borderRadius: 3, borderWidth: 2, borderColor: TODAY_COLOR }} />
+          <Text style={{ color: TODAY_COLOR, fontWeight: '700' }}>今日</Text>
+        </View>
       </View>
     </View>
   );

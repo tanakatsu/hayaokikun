@@ -1,5 +1,5 @@
-import { buildMarkedStatusesForMonth } from '../app/calendar';
-import { createEmptyEntriesState, recordPunchIn } from '../store/entries';
+import { buildMarkedStatusesForMonth, buildPunchTimesForMonth } from '../app/calendar';
+import { cancelEntry, createEmptyEntriesState, recordPunchIn } from '../store/entries';
 import { createInitialSchedule, addScheduleRule } from '../store/schedule';
 import type { DayOfWeek } from '../store/types';
 
@@ -27,5 +27,23 @@ describe('buildMarkedStatusesForMonth', () => {
 
     expect(marked['2026-09-06']).toBe('no-target');
     expect(marked['2026-09-13']).toBe('no-target'); // the following Sunday
+  });
+});
+
+describe('buildPunchTimesForMonth', () => {
+  it('formats punch times as H:MM without a leading zero on the hour', () => {
+    let entries = recordPunchIn(createEmptyEntriesState(), '2026-09-05', 1, '06:05:59', '07:00:00');
+    entries = recordPunchIn(entries, '2026-09-07', 2, '10:30:00', '07:00:00');
+    const times = buildPunchTimesForMonth(entries, 2026, 9);
+
+    expect(times).toEqual({ '2026-09-05': '6:05', '2026-09-07': '10:30' });
+  });
+
+  it('omits cancelled entries and entries outside the month', () => {
+    let entries = recordPunchIn(createEmptyEntriesState(), '2026-09-05', 1, '06:50:00', '07:00:00');
+    entries = cancelEntry(entries, '2026-09-05');
+    entries = recordPunchIn(entries, '2026-10-01', 2, '06:50:00', '07:00:00');
+
+    expect(buildPunchTimesForMonth(entries, 2026, 9)).toEqual({});
   });
 });
