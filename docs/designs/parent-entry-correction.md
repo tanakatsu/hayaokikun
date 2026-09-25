@@ -197,19 +197,19 @@ COVERAGE: 1/22 paths tested  |  GAPS: 21（E2E 1本、残りはユニットテ�
 
 ## Implementation Tasks
 
-- [ ] **T1 (P1, human: ~2h / CC: ~15min)** — store — `isWithinParentEditWindow`・`setEntryTimeByParent` と型の追加、`cancelEntry` に範囲チェックを追加
+- [x] **T1 (P1, human: ~2h / CC: ~15min)** — store — `isWithinParentEditWindow`・`setEntryTimeByParent` と型の追加、`cancelEntry` に範囲チェックを追加
   - Surfaced by: Architecture 1A, Code quality 3A
   - Files: store/types.ts, store/config.ts, store/entries.ts, store/entries.test.ts
   - Verify: `npx jest store/entries.test.ts`
-- [ ] **T2 (P1, human: ~1h / CC: ~10min)** — store — `persistEntries` への共通化と `setEntryTimeByParentAndPersist` の追加、既存テストの日付固定（REGRESSION）
+- [x] **T2 (P1, human: ~1h / CC: ~10min)** — store — `persistEntries` への共通化と `setEntryTimeByParentAndPersist` の追加、既存テストの日付固定（REGRESSION）
   - Surfaced by: Code quality 3A, regression rule
   - Files: store/useAppStore.ts, store/useAppStore.test.ts
   - Verify: `npx jest`
-- [ ] **T3 (P1, human: ~3h / CC: ~20min)** — settings — `TimeOfDayField` の切り出しと、`CancelTodaySection` から `RecentEntriesSection` への置き換え
+- [x] **T3 (P1, human: ~3h / CC: ~20min)** — settings — `TimeOfDayField` の切り出しと、`CancelTodaySection` から `RecentEntriesSection` への置き換え
   - Surfaced by: Code quality 3A
   - Files: app/settings.tsx（必要に応じて app/components/TimeOfDayField.tsx）
   - Verify: 既存と新規の Playwright E2E、Expo Go の実機（Android/iOS）でピッカーを確認
-- [ ] **T4 (P2, human: ~30min / CC: ~5min)** — docs — `hayaoki-app.md` の「記録の取り消し」節と Premise 4 を、本設計への参照に更新
+- [x] **T4 (P2, human: ~30min / CC: ~5min)** — docs — `hayaoki-app.md` の「記録の取り消し」節と Premise 4 を、本設計への参照に更新
   - Surfaced by: office-hours（過去の決定の見直し）
   - Files: docs/designs/hayaoki-app.md
   - Verify: 目視
