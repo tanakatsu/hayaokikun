@@ -126,14 +126,15 @@ npm run test:e2e  # E2Eテスト（Playwright、react-native-web上で実行。�
 
 Expo Goでは確認できない、実機にインストールした状態そのもの（保護者アプリのブロック挙動など）を確認したいときに使う。
 
-初回のみ、EAS Buildの設定が必要（このリポジトリにはまだ`eas.json`が存在しないため、最初に一度だけ実行する）:
+ビルド設定（`eas.json`）はリポジトリに含まれており、`development` / `preview` / `production` の3プロファイルが定義済み。初回はExpoアカウントでログインだけしておく:
 
 ```bash
-npx eas-cli login          # Expoアカウントでログイン
-npx eas-cli build:configure  # eas.jsonを生成（プラットフォームを聞かれたら対象に応じて選択）
+npx eas-cli login  # Expoアカウントでログイン
 ```
 
-`eas.json`ができたら、`preview`プロファイルでビルドする:
+**フォークして自分のアカウントでビルドする場合**: `app.json` の `extra.eas.projectId` は作者のExpoプロジェクトを指しているため、そのままではビルドできない。`extra.eas` ブロックを削除してから `npx eas-cli init` を実行し、自分のプロジェクトIDを割り当てる。あわせて `android.package`（`com.tanakatsu1080.hayaokikun`）も自分用の値に変えておく。
+
+ログインできたら、`preview`プロファイルでビルドする:
 
 ```bash
 npx eas-cli build --platform android --profile preview  # APKが生成される。ビルド完了後のURLからそのまま端末にインストール可能
